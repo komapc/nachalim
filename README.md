@@ -14,12 +14,15 @@ python3 -m http.server 8000 -d site
 scripts/fetch_osm.sh
 python3 scripts/build_rivers.py raw/ways.json raw/sinks.json raw/out
 PYTHONPATH=scripts python3 scripts/enrich_wiki.py raw/out/rivers.json raw/wiki_cache.json site/data
+PYTHONPATH=scripts python3 scripts/build_outside.py raw/ways.json raw/outside raw/out/rivers.json site/data/info.json scripts/outlet_traces.json site/data/outside.geojson
 ```
 
 - `build_rivers.py` groups named OpenStreetMap waterways into streams, follows the flow downstream to find each stream's parent, and classifies the outlet. Corrections go in `scripts/overrides.json`.
 - `enrich_wiki.py` adds Hebrew Wikipedia summaries and writes `site/data/`.
 
 Flow type comes from `overrides.json`, then the opening of the Hebrew Wikipedia article, then OpenStreetMap tags, whose `intermittent` tag is often wrong. Arabic text is removed from the summaries, and base-map labels are limited to Hebrew names.
+
+`build_outside.py` continues streams past the download box, as thin lines. They follow OpenStreetMap ways where those connect, and otherwise `scripts/outlet_traces.json`, which `trace_outlets.py` traced downhill on the elevation model and which is committed so a rebuild does not need that data. The zoom-out limit still fits Israel; only panning reaches these lines.
 
 A basin here is the set of streams that reach the same top-level stream. Where an OpenStreetMap line stops short of its outlet, `overrides.json` records the outlet with `via`: `wiki` means Hebrew Wikipedia says so, and `dem` means it was traced downhill on the Copernicus GLO-30 elevation model. Those rules apply only to a stream that is still untraced, not to namesakes. A stream whose outlet could not be established stays grey and is explained in the legend, rather than guessed.
 

@@ -87,6 +87,19 @@ a { color: var(--accent); }
   box-shadow: 0 6px 18px rgb(0 0 0 / 18%);
 }
 
+.toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: .45rem;
+  margin-block-start: .6rem;
+  font-size: .9rem;
+  cursor: pointer;
+}
+
+.toggle input { flex: none; margin: .3rem 0 0; }
+
+.toggle small { color: var(--muted); }
+
 .link {
   display: inline;
   padding: 0;
@@ -185,9 +198,6 @@ a { color: var(--accent); }
 
 .leaflet-container { font-family: inherit; }
 
-/* Mute the base map so the coloured streams stand out. */
-.leaflet-tile-pane { filter: grayscale(1) contrast(.8) brightness(1.08); }
-
 @media (max-width: 720px) {
   body { flex-direction: column-reverse; }
 
@@ -202,7 +212,9 @@ a { color: var(--accent); }
     border-block-start: 1px solid var(--line);
   }
 
-  #panel > header { display: flex; align-items: center; gap: .75rem; padding: .6rem 1rem; }
+  #panel > header { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .75rem; padding: .6rem 1rem; }
+
+  .toggle { flex-basis: 100%; margin-block-start: .35rem; font-size: .8rem; }
 
   h1 { flex: none; margin: 0; font-size: 1.05rem; }
 

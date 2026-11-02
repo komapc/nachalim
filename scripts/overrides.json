@@ -1,5 +1,24 @@
 [
-  {"name": "נהר הירדן", "sink": "dead"},
+  {"name": "נהר הירדן", "sink": "dead", "flow": "perennial"},
   {"name": "נחל זוהר", "sink": "dead"},
-  {"name": "נחל יזרח", "sink": "dead"}
+  {"name": "נחל יזרח", "sink": "dead"},
+  {"name": "נחל דן", "flow": "perennial"},
+  {"name": "נחל שניר", "flow": "perennial"},
+  {"name": "נחל שניר (חצבני)", "flow": "perennial"},
+  {"name": "נחל ירקון", "flow": "perennial"},
+  {"name": "נחל עמוד", "flow": "perennial"},
+  {"name": "נחל השופט", "flow": "perennial"},
+  {"name": "ואדי א-זרקא", "flow": "perennial"},
+  {"name": "נחל דוד", "flow": "perennial"},
+  {"name": "נחל קישון", "flow": "mixed"},
+  {"name": "נחל ישעי", "flow": "mixed"},
+  {"name": "ירמוך", "flow": "perennial"},
+  {"name": "נהר הליטני", "flow": "perennial"},
+  {"name": "נהר הזהראני", "flow": "perennial"},
+  {"name": "נחל אלכסנדר", "flow": "mixed"},
+  {"name": "נחל פרת", "flow": "mixed"},
+  {"name": "נחל זויתן", "flow": "mixed"},
+  {"name": "נחל גלבון", "flow": "mixed"},
+  {"name": "נחל דישון", "flow": "mixed"},
+  {"name": "נחל עיון", "flow": "mixed"}
 ]

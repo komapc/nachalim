@@ -16,25 +16,74 @@ const SINK_NAMES = {
   hula: "אגמון החולה",
 };
 
+const FLOW_LABELS = {
+  perennial: "נחל איתן: זורם כל השנה",
+  mixed: "איתן בחלקו",
+  intermittent: "נחל אכזב: זורם בעיקר בחורף",
+};
+
 const details = document.getElementById("details");
+const dryToggle = document.getElementById("dry");
 const search = document.getElementById("q");
 const results = document.getElementById("results");
 
-const map = L.map("map", { preferCanvas: true, minZoom: 6, maxZoom: 15, renderer: L.canvas({ tolerance: 7 }) });
-// Whole zooms only: fractional zoom leaves visible seams between raster tiles.
-map.setView([31.45, 35.1], document.getElementById("map").clientHeight >= 780 ? 8 : 7);
-map.setMaxBounds([[28.5, 33], [34.5, 37.2]]);
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-}).addTo(map);
+const ISRAEL = L.latLngBounds([29.47, 34.24], [33.36, 35.92]);
+const BASEMAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
+const SHIELD_LAYER = /shield/;
+
+const map = L.map("map", {
+  preferCanvas: true,
+  zoomSnap: 0.25,
+  maxZoom: 15,
+  maxBounds: ISRAEL.pad(0.04),
+  maxBoundsViscosity: 1,
+  renderer: L.canvas({ tolerance: 7 }),
+});
+
+// The furthest zoom-out is the one where all of Israel just fits.
+function fitIsrael() {
+  const wasAtLimit = map.getZoom() <= map.getMinZoom();
+  map.options.minZoom = 0; // getBoundsZoom clamps to the current limit
+  const minZoom = map.getBoundsZoom(ISRAEL);
+  map.setMinZoom(minZoom);
+  if (wasAtLimit) map.fitBounds(ISRAEL, { animate: false });
+}
+map.fitBounds(ISRAEL, { animate: false });
+map.setMinZoom(map.getBoundsZoom(ISRAEL));
+map.on("resize", fitIsrael);
+
+maplibregl.setRTLTextPlugin(new URL("vendor/maplibre/mapbox-gl-rtl-text.js", location.href).href, true);
+
+// Show Hebrew place names only: a place without one simply has no label.
+function hebrewOnly(style) {
+  // Large country and region names would sit on top of the streams.
+  style.layers = style.layers.filter((styleLayer) => !/^label_(country|state)/.test(styleLayer.id));
+  for (const styleLayer of style.layers) {
+    if (styleLayer.layout?.["text-field"] && !SHIELD_LAYER.test(styleLayer.id)) {
+      styleLayer.layout["text-field"] = ["get", "name:he"];
+    }
+  }
+  return style;
+}
+
+fetch(BASEMAP_STYLE)
+  .then((response) => response.json())
+  .then((style) => {
+    L.maplibreGL({
+      style: hebrewOnly(style),
+      attribution: '<a href="https://openfreemap.org">OpenFreeMap</a> &copy; <a href="https://www.openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+  });
 
 let info = {};
 let layer = null;
 let selected = null;
 let filter = null;
+let showDry = true;
 const layersById = new Map();
 const idBySlug = new Map();
+
+const flows = (flow) => flow === "perennial" || flow === "mixed";
 
 function weightFor(km, zoom) {
   const base = km >= 50 ? 3 : km >= 15 ? 2.2 : km >= 5 ? 1.5 : 1;
@@ -42,7 +91,7 @@ function weightFor(km, zoom) {
 }
 
 function styleFor(feature) {
-  const { i, d, k } = feature.properties;
+  const { i, d, k, f } = feature.properties;
   const zoom = map.getZoom();
   const entry = info[i];
   const color = DRAINAGE[d].color;
@@ -61,7 +110,8 @@ function styleFor(feature) {
       opacity = Math.min(opacity, 0.15);
     }
   }
-  return { color, weight, opacity, lineCap: "round", lineJoin: "round" };
+  const dashArray = !flows(f) && zoom >= 10 && i !== selected ? "6 6" : null;
+  return { color, weight, opacity, dashArray, lineCap: "round", lineJoin: "round" };
 }
 
 function restyle() {
@@ -120,8 +170,9 @@ const formatKm = (km) => (km < 10 ? km.toFixed(1) : Math.round(km).toLocaleStrin
 function renderOverview() {
   details.replaceChildren();
   const counts = {};
-  for (const entry of Object.values(info)) counts[entry.d] = (counts[entry.d] || 0) + 1;
-  const total = Object.keys(info).length.toLocaleString("he-IL");
+  const visible = Object.values(info).filter((entry) => showDry || flows(entry.f));
+  for (const entry of visible) counts[entry.d] = (counts[entry.d] || 0) + 1;
+  const total = visible.length.toLocaleString("he-IL");
   details.append(el("p", { class: "summary" }, `${total} נחלים על המפה. לחצו על נחל כדי לגלות לאיזה אגן הוא שייך, לאן הוא נשפך ומי יובליו.`));
   details.append(el("h3", {}, "לאן הנחלים זורמים"));
   const legend = el("ul", { class: "legend" });
@@ -160,7 +211,7 @@ function renderRiver(id) {
   }
   if (stats.count > 1) addFact("גודל האגן", `${stats.count.toLocaleString("he-IL")} נחלים, כ־${formatKm(stats.km)} ק״מ`);
   addFact("אורך", `כ־${formatKm(entry.k)} ק״מ`);
-  if (entry.f === "perennial" || entry.f === "mixed") addFact("זרימה", entry.f === "mixed" ? "זורם כל השנה בחלקו" : "זורם כל השנה");
+  addFact("זרימה", FLOW_LABELS[entry.f] || "אין מידע");
   details.append(facts);
 
   const steps = flowPath(id);
@@ -188,7 +239,19 @@ function renderRiver(id) {
   }
 }
 
+function setShowDry(value) {
+  showDry = value;
+  dryToggle.checked = value;
+  for (const [id, line] of layersById) {
+    if (flows(info[id].f)) continue;
+    if (value) layer.addLayer(line);
+    else layer.removeLayer(line);
+  }
+  restyle();
+}
+
 function select(id, zoomTo) {
+  if (!showDry && !flows(info[id].f)) setShowDry(true);
   selected = id;
   renderRiver(id);
   restyle();
@@ -237,6 +300,11 @@ function renderSearch() {
   }
 }
 
+dryToggle.addEventListener("change", () => {
+  setShowDry(dryToggle.checked);
+  if (selected === null) renderOverview();
+  else if (!showDry && !flows(info[selected].f)) clearSelection();
+});
 search.addEventListener("input", renderSearch);
 search.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
@@ -270,6 +338,8 @@ Promise.all([
       });
     },
   }).addTo(map);
+  const dryCount = Object.values(info).filter((entry) => !flows(entry.f)).length;
+  document.getElementById("dry-count").textContent = `(${dryCount.toLocaleString("he-IL")})`;
   renderOverview();
   openFromHash();
 }).catch(() => {

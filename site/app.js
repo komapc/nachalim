@@ -246,6 +246,13 @@ function renderAquifer(entry) {
   details.replaceChildren();
   details.scrollTop = 0;
   details.append(el("div", { class: "back" }, el("button", { class: "link", type: "button", onclick: clearSelection }, "→ לכל הנחלים")));
+  const switcher = el("nav", { class: "chips", "aria-label": "מעבר בין אקוויפרים" });
+  for (const other of aquifers) {
+    const attrs = { type: "button", onclick: () => selectAquifer(other) };
+    if (other === entry) attrs["aria-current"] = "true";
+    switcher.append(el("button", attrs, other.name.replace(/^(אגן|אקוויפר)\s+/, "")));
+  }
+  details.append(switcher);
   details.append(el("h2", {}, entry.name));
   details.append(el("div", { class: "basin-tag" }, el("span", { class: "swatch swatch-aquifer" }), "אקוויפר · גבולות סכמטיים"));
   const facts = el("dl", { class: "facts" });
@@ -273,6 +280,7 @@ function renderAquifer(entry) {
     details.append(el("p", { class: "note" }, entry.empty));
   }
   details.append(el("p", { class: "note" }, "מקור: ", el("a", { href: AQUIFER_SOURCE, target: "_blank", rel: "noopener" }, "המכון הגיאולוגי, דרך Jewish Virtual Library"), ". הנתונים מתחילת שנות ה־2000."));
+  switcher.querySelector("[aria-current]").scrollIntoView({ block: "nearest", inline: "center" });
 }
 
 function selectAquifer(entry) {

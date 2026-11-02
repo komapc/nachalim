@@ -90,6 +90,8 @@ fetch(BASEMAP_STYLE)
 
 let info = {};
 let layer = null;
+let outsideLayer = null;
+const outsideBySlug = new Map();
 let selected = null;
 let filter = null;
 let showDry = true;
@@ -139,8 +141,33 @@ function styleFor(feature) {
   return { color, weight, opacity, dashArray, lineCap: "round", lineJoin: "round" };
 }
 
+// Lines past the data edge follow their stream's state, and are thinner.
+function outsideStyle(feature) {
+  const { s, src } = feature.properties;
+  const entry = s ? info[idBySlug.get(s)] : null;
+  const dry = entry ? !flows(entry.f) : true;
+  const drainage = entry ? entry.d : "med";
+  let opacity = 0.7;
+  let weight = 1.6 + Math.max(0, map.getZoom() - 9) * 0.25;
+  if (!showDry && dry) opacity = 0;
+  if (filter && drainage !== filter) opacity = 0.08;
+  if (aquifer) opacity = Math.min(opacity, 0.15);
+  if (selected !== null) {
+    const current = info[selected];
+    const sameBasin = entry ? entry.r === current.r : current.sink === "arish";
+    if (sameBasin) {
+      opacity = 1;
+      weight += 1;
+    } else {
+      opacity = Math.min(opacity, 0.15);
+    }
+  }
+  return { color: DRAINAGE[drainage].color, weight, opacity, dashArray: src === "dem" ? "2 6" : null, lineCap: "round" };
+}
+
 function restyle() {
   if (layer) layer.setStyle(styleFor);
+  if (outsideLayer) outsideLayer.setStyle(outsideStyle);
   if (selected !== null) layersById.get(selected).bringToFront();
 }
 
@@ -217,6 +244,7 @@ function renderOverview() {
   }
   details.append(legend);
   if (counts.unknown) details.append(el("p", { class: "note" }, "באפור: נחלים שלא מצאנו לאן הם זורמים."));
+  if (outsideLayer) details.append(el("p", { class: "note" }, "קו דק: המשך הנחל מחוץ לתחום המפה. קו מנוקד: מסלול שהוסק מגובה השטח."));
   if (aquifers.length) {
     details.append(el("h3", {}, "מי תהום: אקוויפרים"));
     details.append(el("p", { class: "note" }, "אקוויפר הוא שכבת סלע נקבובית או סדוקה שמים נעים בתוכה. אקוויפרים יכולים לשכב זה מעל זה, ולכן מוצג אחד בכל פעם. הגבולות סכמטיים."));
@@ -365,7 +393,11 @@ function select(id, zoomTo) {
   renderRiver(id);
   restyle();
   history.replaceState(null, "", `#${encodeURIComponent(info[id].s)}`);
-  if (zoomTo) map.fitBounds(layersById.get(id).getBounds(), { padding: [40, 40], maxZoom: 13 });
+  if (zoomTo) {
+    const bounds = L.latLngBounds(layersById.get(id).getBounds());
+    for (const line of outsideBySlug.get(info[id].s) || []) bounds.extend(line.getBounds());
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
+  }
 }
 
 function clearSelection() {
@@ -439,11 +471,31 @@ Promise.all([
   fetch("data/info.json").then((response) => response.json()),
   // The stream map must keep working if this optional layer fails to load.
   fetch("data/aquifers.json").then((response) => response.json()).catch(() => []),
-]).then(([geojson, infoData, aquiferData]) => {
+  fetch("data/outside.geojson").then((response) => response.json()).catch(() => null),
+]).then(([geojson, infoData, aquiferData, outside]) => {
   info = infoData;
   aquifers = aquiferData;
   for (const entry of aquifers) aquiferBySlug.set(entry.id, entry);
   for (const [id, entry] of Object.entries(info)) idBySlug.set(entry.s, Number(id));
+  if (outside) {
+    outsideLayer = L.geoJSON(outside, {
+      style: outsideStyle,
+      onEachFeature(feature, line) {
+        const { s, n } = feature.properties;
+        if (s) {
+          if (!outsideBySlug.has(s)) outsideBySlug.set(s, []);
+          outsideBySlug.get(s).push(line);
+        }
+        line.bindTooltip(s ? `המשך של ${n}` : n, { sticky: true, direction: "top" });
+        line.on("click", (event) => {
+          L.DomEvent.stopPropagation(event);
+          if (s) select(idBySlug.get(s), false);
+        });
+      },
+    }).addTo(map);
+    // Panning reaches these lines; the zoom limit still stops at all of Israel.
+    map.setMaxBounds(ISRAEL.pad(0.04).extend(outsideLayer.getBounds().pad(0.02)));
+  }
   layer = L.geoJSON(geojson, {
     style: styleFor,
     onEachFeature(feature, line) {

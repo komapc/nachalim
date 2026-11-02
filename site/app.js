@@ -5,7 +5,7 @@ const DRAINAGE = {
   jordan: { label: "הירדן והכנרת", color: "#0b9a8d" },
   dead: { label: "ים המלח", color: "#c9662b" },
   gulf: { label: "מפרץ אילת", color: "#8e4fb8" },
-  unknown: { label: "מוצא לא זוהה", color: "#7d8a8e" },
+  unknown: { label: "מוצא לא ידוע", color: "#7d8a8e" },
 };
 
 const SINK_NAMES = {
@@ -14,6 +14,12 @@ const SINK_NAMES = {
   dead: "ים המלח",
   kinneret: "הכנרת",
   hula: "אגמון החולה",
+  arish: "ואדי אל-עריש",
+};
+
+const OUTLET_SOURCES = {
+  wiki: "המוצא לפי ויקיפדיה, כי קו הנחל במפה נקטע.",
+  dem: "קו הנחל במפה נקטע, והמוצא הוסק מגובה השטח (מודל הגובה Copernicus).",
 };
 
 const FLOW_LABELS = {
@@ -166,6 +172,8 @@ function flowPath(id) {
     if (sink === "hula") steps.push("הכנרת");
     if (jordan !== undefined) steps.push(riverLink(Number(jordan)));
     steps.push(SINK_NAMES.dead);
+  } else if (sink === "arish") {
+    steps.push(SINK_NAMES.arish, SINK_NAMES.med);
   } else if (sink) {
     steps.push(SINK_NAMES[sink]);
   }
@@ -196,6 +204,7 @@ function renderOverview() {
   details.append(el("h3", {}, "לאן הנחלים זורמים"));
   const legend = el("ul", { class: "legend" });
   for (const [key, { label, color }] of Object.entries(DRAINAGE)) {
+    if (key === "unknown" && !counts.unknown) continue;
     legend.append(el("li", {}, el("button", {
       type: "button",
       "aria-pressed": String(filter === key),
@@ -207,6 +216,7 @@ function renderOverview() {
     }, el("span", { class: "swatch", style: `background:${color}` }), label, el("small", {}, String(counts[key] || 0)))));
   }
   details.append(legend);
+  if (counts.unknown) details.append(el("p", { class: "note" }, "באפור: נחלים שלא מצאנו לאן הם זורמים."));
   if (aquifers.length) {
     details.append(el("h3", {}, "מי תהום: אקוויפרים"));
     details.append(el("p", { class: "note" }, "אקוויפר הוא שכבת סלע נקבובית או סדוקה שמים נעים בתוכה. אקוויפרים יכולים לשכב זה מעל זה, ולכן מוצג אחד בכל פעם. הגבולות סכמטיים."));
@@ -308,6 +318,7 @@ function renderRiver(id) {
     const flow = el("ol", { class: "flow" });
     for (const step of steps) flow.append(el("li", {}, step));
     details.append(flow);
+    if (entry.v) details.append(el("p", { class: "note" }, OUTLET_SOURCES[entry.v]));
   } else {
     details.append(el("p", { class: "note summary" }, "לא הצלחנו לזהות את מוצא הנחל מתוך הנתונים."));
   }

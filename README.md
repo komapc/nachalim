@@ -21,7 +21,7 @@ PYTHONPATH=scripts python3 scripts/enrich_wiki.py raw/out/rivers.json raw/wiki_c
 
 Flow type comes from `overrides.json`, then the opening of the Hebrew Wikipedia article, then OpenStreetMap tags, whose `intermittent` tag is often wrong. Arabic text is removed from the summaries, and base-map labels are limited to Hebrew names.
 
-A basin here is the set of streams that reach the same top-level stream. Streams whose outlet cannot be traced are shown as unidentified rather than guessed.
+A basin here is the set of streams that reach the same top-level stream. Where an OpenStreetMap line stops short of its outlet, `overrides.json` records the outlet with `via`: `wiki` means Hebrew Wikipedia says so, and `dem` means it was traced downhill on the Copernicus GLO-30 elevation model. Those rules apply only to a stream that is still untraced, not to namesakes. A stream whose outlet could not be established stays grey and is explained in the legend, rather than guessed.
 
 ## Aquifers
 
@@ -31,4 +31,5 @@ A basin here is the set of streams that reach the same top-level stream. Streams
 
 - Stream geometry: © OpenStreetMap contributors, [ODbL](https://www.openstreetmap.org/copyright). `site/data/rivers.geojson` and the derived topology in `site/data/info.json` are a derivative database under the same licence.
 - Summaries in `site/data/info.json`: Hebrew Wikipedia, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+- Elevation used to trace outlets (not redistributed): Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA.
 - Base map: [OpenFreeMap](https://openfreemap.org), © OpenMapTiles, © OpenStreetMap. Leaflet: BSD-2-Clause. MapLibre GL JS: BSD-3-Clause.

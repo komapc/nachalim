@@ -278,6 +278,11 @@ def apply_overrides(entities):
         by_name[entity["name"]].append(entity)
     for rule in json.load(open(OVERRIDES_PATH, encoding="utf-8")):
         for entity in by_name.get(rule["name"], []):
+            # Outlet research applies only to the untraced stream, not to namesakes.
+            if "via" in rule:
+                if entity["parent"] is not None or entity["sink"]:
+                    continue
+                entity["via"] = rule["via"]
             if "parent" in rule:
                 targets = by_name.get(rule["parent"], [])
                 entity["parent"] = min(targets, key=lambda t: dist_m(entity["mouth"], t["mouth"]))["idx"] if targets else None
@@ -333,7 +338,7 @@ def main():
             "parent": entity["parent"], "chain": chain,
             "root": root["idx"], "sink": root["sink"],
             "km": round(total, 1), "perennial_km": round(wet, 1), "intermittent_km": round(dry, 1),
-            "mouth": entity["mouth"], "tags": best, "flow": entity.get("flow"),
+            "mouth": entity["mouth"], "tags": best, "flow": entity.get("flow"), "via": entity.get("via"),
             "lines": [[[round(x, 5), round(y, 5)] for x, y in simplify(w["pts"])] for w in entity["ways"]],
         })
     pathlib.Path(out_dir).mkdir(parents=True, exist_ok=True)

@@ -132,6 +132,8 @@ def drainage(river, rivers):
     root = rivers[river["root"]]
     if root["name"] == "נהר הירדן" or root["sink"] in ("kinneret", "hula"):
         return "jordan"
+    if root["sink"] == "arish":  # Wadi al-Arish reaches the Mediterranean in Sinai.
+        return "med"
     return root["sink"] or "unknown"
 
 
@@ -185,6 +187,8 @@ def main():
         entry = {"s": river["slug"], "n": river["name"], "d": drainage(river, rivers),
                  "r": river["root"], "p": river["parent"], "k": river["km"], "sink": rivers[river["root"]]["sink"],
                  "c": sorted(children[river["id"]], key=lambda i: -rivers[i]["km"])}
+        if river["via"]:
+            entry["v"] = river["via"]
         if river["tags"].get("name:en"):
             entry["en"] = river["tags"]["name:en"]
         flow = river["flow"] or (wiki_flow(page["extract"]) if usable else None) or osm_flow(river)

@@ -5,6 +5,7 @@ const DRAINAGE = {
   jordan: { label: "הירדן והכנרת", color: "#0b9a8d" },
   dead: { label: "ים המלח", color: "#c9662b" },
   gulf: { label: "מפרץ אילת", color: "#8e4fb8" },
+  closed: { label: "אגן סגור: מלחת יטבתה", color: "#b8960c" },
   unknown: { label: "מוצא לא ידוע", color: "#7d8a8e" },
 };
 
@@ -15,6 +16,7 @@ const SINK_NAMES = {
   kinneret: "הכנרת",
   hula: "אגמון החולה",
   arish: "ואדי אל-עריש",
+  yotvata: "מלחת יטבתה",
 };
 
 const OUTLET_SOURCES = {
@@ -355,6 +357,7 @@ function renderRiver(id) {
     for (const step of steps) flow.append(el("li", {}, step));
     details.append(flow);
     if (entry.v) details.append(el("p", { class: "note" }, OUTLET_SOURCES[entry.v]));
+    if (entry.d === "closed") details.append(el("p", { class: "note" }, "מלחת יטבתה היא שקע סגור: מי השיטפונות נאגרים בה ומתאדים או מחלחלים, ואינם מגיעים לים."));
   } else {
     details.append(el("p", { class: "note summary" }, "לא הצלחנו לזהות את מוצא הנחל מתוך הנתונים."));
   }

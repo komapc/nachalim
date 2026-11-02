@@ -6,7 +6,7 @@ import pathlib
 from playwright.sync_api import sync_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-COLORS = {"med": "#1f78c1", "jordan": "#0b9a8d", "dead": "#c9662b", "gulf": "#8e4fb8", "unknown": "#7d8a8e"}
+COLORS = {"med": "#1f78c1", "jordan": "#0b9a8d", "dead": "#c9662b", "gulf": "#8e4fb8", "closed": "#b8960c", "unknown": "#7d8a8e"}
 LEGEND = [("med", "הים התיכון"), ("jordan", "הירדן והכנרת"), ("dead", "ים המלח"), ("gulf", "מפרץ אילת")]
 WIDTH, HEIGHT = 1200, 630
 LAT = (29.45, 33.42)

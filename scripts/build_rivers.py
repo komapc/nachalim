@@ -124,6 +124,10 @@ def classify_sink(point, grids):
     for sink, grid in grids.items():
         if next(grid.near(point, COAST_RADIUS_M), None):
             return sink
+    # Yotvata basin: a closed depression, 30 m deep on Copernicus GLO-30 (floor 48 m,
+    # lowest rim 77 m) and described as having no outlet. Floods do not reach the sea.
+    if 29.74 <= point[1] < 29.95 and 34.95 <= point[0] < 35.2:
+        return "yotvata"
     # Southern Arava: streams fade out on the valley floor, south of the divide.
     if point[1] < 29.95 and 34.95 <= point[0] < 35.2:
         return "gulf"
@@ -226,7 +230,7 @@ def resolve(entities, ways, grids):
             sink = classify_sink(end, grids) if target is None else None
             options.append((target, sink, end))
         # A sink reached directly wins, the lowest final sink first; then a parent.
-        order = {"dead": 0, "gulf": 0, "med": 0, "kinneret": 1, "hula": 2}
+        order = {"dead": 0, "gulf": 0, "yotvata": 0, "med": 0, "kinneret": 1, "hula": 2}
         options.sort(key=lambda o: (order.get(o[1], 5) if o[1] else (3 if o[0] is not None else 6)))
         entity["parent"], entity["sink"], entity["mouth"] = options[0]
 

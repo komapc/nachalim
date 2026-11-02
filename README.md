@@ -23,6 +23,10 @@ Flow type comes from `overrides.json`, then the opening of the Hebrew Wikipedia 
 
 A basin here is the set of streams that reach the same top-level stream. Streams whose outlet cannot be traced are shown as unidentified rather than guessed.
 
+## Aquifers
+
+`site/data/aquifers.json` is written by hand and the rebuild scripts do not touch it. The polygons are schematic: they follow the wording of the [basin descriptions](https://www.jewishvirtuallibrary.org/groundwater-basins-in-israel) credited to the Geological Survey of Israel, and were not traced from any published map. A stream is linked to an aquifer only where that source, its Wikipedia summary or a named OpenStreetMap spring supports the link, so the lists are partial.
+
 ## Licences
 
 - Stream geometry: © OpenStreetMap contributors, [ODbL](https://www.openstreetmap.org/copyright). `site/data/rivers.geojson` and the derived topology in `site/data/info.json` are a derivative database under the same licence.

@@ -134,6 +134,8 @@ def drainage(river, rivers):
         return "jordan"
     if root["sink"] == "arish":  # Wadi al-Arish reaches the Mediterranean in Sinai.
         return "med"
+    if root["sink"] == "yotvata":
+        return "closed"
     return root["sink"] or "unknown"
 
 

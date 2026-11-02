@@ -36,3 +36,5 @@ A basin here is the set of streams that reach the same top-level stream. Where a
 - Summaries in `site/data/info.json`: Hebrew Wikipedia, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 - Elevation used to trace outlets (not redistributed): Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA.
 - Base map: [OpenFreeMap](https://openfreemap.org), © OpenMapTiles, © OpenStreetMap. Leaflet: BSD-2-Clause. MapLibre GL JS: BSD-3-Clause.
+
+Twelve streams of the southern Arava end in the Yotvata salt flat, shown as a closed basin rather than the Gulf of Eilat. On Copernicus GLO-30 at full 30 m the depression covers about 97 km², with a floor at 48 m and the lowest rim at 77 m, and Hebrew Wikipedia describes the flat as a closed depression. The Evrona flat further south shows no such rim, which fits published work that it is now open, so its streams stay in the Gulf group.

@@ -19,10 +19,12 @@ PYTHONPATH=scripts python3 scripts/enrich_wiki.py raw/out/rivers.json raw/wiki_c
 - `build_rivers.py` groups named OpenStreetMap waterways into streams, follows the flow downstream to find each stream's parent, and classifies the outlet. Corrections go in `scripts/overrides.json`.
 - `enrich_wiki.py` adds Hebrew Wikipedia summaries and writes `site/data/`.
 
+Flow type comes from `overrides.json`, then the opening of the Hebrew Wikipedia article, then OpenStreetMap tags, whose `intermittent` tag is often wrong. Arabic text is removed from the summaries, and base-map labels are limited to Hebrew names.
+
 A basin here is the set of streams that reach the same top-level stream. Streams whose outlet cannot be traced are shown as unidentified rather than guessed.
 
 ## Licences
 
 - Stream geometry: © OpenStreetMap contributors, [ODbL](https://www.openstreetmap.org/copyright). `site/data/rivers.geojson` and the derived topology in `site/data/info.json` are a derivative database under the same licence.
 - Summaries in `site/data/info.json`: Hebrew Wikipedia, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
-- Base map: © OpenStreetMap. Leaflet: BSD-2-Clause.
+- Base map: [OpenFreeMap](https://openfreemap.org), © OpenMapTiles, © OpenStreetMap. Leaflet: BSD-2-Clause. MapLibre GL JS: BSD-3-Clause.

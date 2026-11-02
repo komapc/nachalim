@@ -9,6 +9,7 @@ disambiguation page, and any page coordinates lie near the river.
 import collections
 import json
 import pathlib
+import re
 import sys
 import time
 import urllib.error
@@ -90,8 +91,36 @@ def near(coord, lines):
     return any(dist_m(coord, p) <= MAX_MATCH_KM * 1000 for line in lines for p in line)
 
 
+ARABIC = re.compile("[\u0600-\u06ff]")
+ARABIC_NOTE = re.compile(r"\s*\([^()]*(?:[\u0600-\u06ff]|בערבית|ערבית:)[^()]*\)")
+PERENNIAL = re.compile(r"(?:נחל|נהר) איתן|הנחל האיתן")
+INTERMITTENT = re.compile(r"נחל אכזב|נחלי האכזב|נחל עונתי")
+
+
+def strip_arabic(text):
+    """Drop parentheticals giving Arabic names, then any sentence still in Arabic."""
+    text = ARABIC_NOTE.sub("", text)
+    return " ".join(s for s in re.split(r"(?<=\.)\s+", text) if not ARABIC.search(s) and "בערבית" not in s)
+
+
+def wiki_flow(extract):
+    """Classify from the opening of the article, where it defines the stream."""
+    opening = " ".join(re.split(r"(?<=\.)\s+", strip_arabic(extract))[:2])
+    perennial, intermittent = PERENNIAL.search(opening), INTERMITTENT.search(opening)
+    if perennial and intermittent:
+        return "mixed"
+    return "perennial" if perennial else "intermittent" if intermittent else None
+
+
+def osm_flow(river):
+    total = river["km"] or 1
+    if river["perennial_km"] > 0:
+        return "perennial" if river["perennial_km"] / total > 0.5 else "mixed"
+    return "intermittent" if river["intermittent_km"] / total > 0.5 else None
+
+
 def trim(text):
-    text = " ".join(text.split())
+    text = " ".join(strip_arabic(text).split())
     if len(text) <= SUMMARY_CHARS:
         return text
     cut = text[:SUMMARY_CHARS]
@@ -158,20 +187,16 @@ def main():
                  "c": sorted(children[river["id"]], key=lambda i: -rivers[i]["km"])}
         if river["tags"].get("name:en"):
             entry["en"] = river["tags"]["name:en"]
-        total = river["km"] or 1
-        if river["perennial_km"] / total > 0.5:
-            entry["f"] = "perennial"
-        elif river["perennial_km"] > 0:
-            entry["f"] = "mixed"
-        elif river["intermittent_km"] / total > 0.5:
-            entry["f"] = "intermittent"
+        flow = river["flow"] or (wiki_flow(page["extract"]) if usable else None) or osm_flow(river)
+        if flow:
+            entry["f"] = flow
         if usable:
             linked += 1
             entry["w"] = page["title"]
             entry["x"] = trim(page["extract"])
         info[river["id"]] = entry
         features.append({"type": "Feature", "id": river["id"],
-                         "properties": {"i": river["id"], "d": entry["d"], "k": river["km"], "n": river["name"]},
+                         "properties": {"i": river["id"], "d": entry["d"], "k": river["km"], "n": river["name"], "f": entry.get("f", "")},
                          "geometry": {"type": "MultiLineString", "coordinates": river["lines"]}})
 
     out = pathlib.Path(out_dir)

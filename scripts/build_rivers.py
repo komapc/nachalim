@@ -11,7 +11,7 @@ import pathlib
 import re
 import sys
 
-NAME_RE = re.compile(r"^(נחל|נהר|ואדי|וואדי|ערוץ|יובל|עין)\b|הירדן")
+NAME_RE = re.compile(r"^(נחל|נהר|ואדי|וואדי|ערוץ|יובל|עין)\b|הירדן|ירמוך")
 SNAP_M = 120
 OVERRIDES_PATH = pathlib.Path(__file__).with_name("overrides.json")
 
@@ -22,6 +22,7 @@ def is_hebrew(text):
 
 def name_of(tags):
     name = tags.get("name:he") or tags.get("name", "")
+    name = re.sub("[\u0591-\u05c7]", "", name)  # strip niqqud
     return name.strip() if is_hebrew(name) else None
 
 
@@ -283,6 +284,8 @@ def apply_overrides(entities):
             if "sink" in rule:
                 entity["sink"] = rule["sink"]
                 entity["parent"] = None
+            if "flow" in rule:
+                entity["flow"] = rule["flow"]
 
 
 def main():
@@ -330,7 +333,7 @@ def main():
             "parent": entity["parent"], "chain": chain,
             "root": root["idx"], "sink": root["sink"],
             "km": round(total, 1), "perennial_km": round(wet, 1), "intermittent_km": round(dry, 1),
-            "mouth": entity["mouth"], "tags": best,
+            "mouth": entity["mouth"], "tags": best, "flow": entity.get("flow"),
             "lines": [[[round(x, 5), round(y, 5)] for x, y in simplify(w["pts"])] for w in entity["ways"]],
         })
     pathlib.Path(out_dir).mkdir(parents=True, exist_ok=True)

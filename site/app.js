@@ -1,5 +1,7 @@
 "use strict";
 
+const track = (name, params) => window.gtag?.("event", name, params);
+
 const DRAINAGE = {
   med: { label: "הים התיכון", color: "#1f78c1" },
   jordan: { label: "הירדן והכנרת", color: "#0b9a8d" },
@@ -319,6 +321,7 @@ function selectAquifer(entry) {
   filter = null;
   showAquiferShape(entry);
   renderAquifer(entry);
+  track("select_aquifer", { aquifer: entry.id });
   restyle();
   history.replaceState(null, "", `#${entry.id}`);
   map.fitBounds(aquiferShape.getBounds(), { padding: [30, 30] });
@@ -394,6 +397,7 @@ function select(id, zoomTo) {
   aquifer = null;
   showAquiferShape(null);
   renderRiver(id);
+  track("select_river", { river: info[id].s });
   restyle();
   history.replaceState(null, "", `#${encodeURIComponent(info[id].s)}`);
   if (zoomTo) {
@@ -422,15 +426,20 @@ function normalize(text) {
   return text.replace(/[֑-ׇ]/g, "").replace(/^(נחל|נהר|ואדי|וואדי)\s+/, "").replace(/^ה/, "");
 }
 
+let searchTimer;
+
 function renderSearch() {
   const query = normalize(search.value.trim());
   results.replaceChildren();
   results.hidden = !query;
+  clearTimeout(searchTimer);
   if (!query) return;
   const matches = Object.entries(info)
     .filter(([, entry]) => normalize(entry.n).includes(query))
     .sort(([, a], [, b]) => normalize(b.n).startsWith(query) - normalize(a.n).startsWith(query) || b.k - a.k)
     .slice(0, 30);
+  // Wait for a pause, so a word counts once and not once per keystroke.
+  searchTimer = setTimeout(() => track("search", { search_term: query.slice(0, 40), result_count: matches.length }), 1500);
   if (!matches.length) {
     results.append(el("li", { class: "note", style: "padding:.4rem .5rem" }, "לא נמצאו נחלים"));
     return;

@@ -22,6 +22,9 @@ const FLOW_LABELS = {
   intermittent: "נחל אכזב: זורם בעיקר בחורף",
 };
 
+const AQUIFER_COLOR = "#5b4fc7";
+const AQUIFER_SOURCE = "https://www.jewishvirtuallibrary.org/groundwater-basins-in-israel";
+
 const details = document.getElementById("details");
 const dryToggle = document.getElementById("dry");
 const search = document.getElementById("q");
@@ -52,6 +55,10 @@ map.fitBounds(ISRAEL, { animate: false });
 map.setMinZoom(map.getBoundsZoom(ISRAEL));
 map.on("resize", fitIsrael);
 
+// A diagram under the streams: never takes clicks, so streams stay selectable.
+map.createPane("aquifers").style.zIndex = 350;
+const aquiferRenderer = L.svg({ pane: "aquifers" });
+
 maplibregl.setRTLTextPlugin(new URL("vendor/maplibre/mapbox-gl-rtl-text.js", location.href).href, true);
 
 // Show Hebrew place names only: a place without one simply has no label.
@@ -80,6 +87,10 @@ let layer = null;
 let selected = null;
 let filter = null;
 let showDry = true;
+let aquifers = [];
+let aquifer = null;
+let aquiferShape = null;
+const aquiferBySlug = new Map();
 const layersById = new Map();
 const idBySlug = new Map();
 
@@ -98,6 +109,14 @@ function styleFor(feature) {
   let opacity = k < 3 && zoom < 9.5 ? 0.35 : 0.85;
   let weight = weightFor(k, zoom);
   if (filter && d !== filter) opacity = 0.08;
+  if (aquifer) {
+    if (aquifer.rivers.includes(info[i].s)) {
+      opacity = 1;
+      weight += 2;
+    } else {
+      opacity = Math.min(opacity, 0.15);
+    }
+  }
   if (selected !== null) {
     const sameBasin = entry.r === info[selected].r;
     if (i === selected) {
@@ -188,6 +207,73 @@ function renderOverview() {
     }, el("span", { class: "swatch", style: `background:${color}` }), label, el("small", {}, String(counts[key] || 0)))));
   }
   details.append(legend);
+  if (aquifers.length) {
+    details.append(el("h3", {}, "מי תהום: אקוויפרים"));
+    details.append(el("p", { class: "note" }, "אקוויפר הוא שכבת סלע נקבובית או סדוקה שמים נעים בתוכה. אקוויפרים יכולים לשכב זה מעל זה, ולכן מוצג אחד בכל פעם. הגבולות סכמטיים."));
+    const list = el("ul", { class: "legend" });
+    for (const entry of aquifers) {
+      list.append(el("li", {}, el("button", { type: "button", onclick: () => selectAquifer(entry) },
+        el("span", { class: "swatch swatch-aquifer" }), entry.name)));
+    }
+    details.append(list);
+  }
+}
+
+function showAquiferShape(entry) {
+  if (aquiferShape) aquiferShape.remove();
+  aquiferShape = entry && L.polygon(entry.ring.map(([lng, lat]) => [lat, lng]), {
+    pane: "aquifers",
+    renderer: aquiferRenderer,
+    interactive: false,
+    color: AQUIFER_COLOR,
+    weight: 2,
+    dashArray: "6 5",
+    fillOpacity: 0.16,
+  }).addTo(map);
+}
+
+function renderAquifer(entry) {
+  details.replaceChildren();
+  details.scrollTop = 0;
+  details.append(el("div", { class: "back" }, el("button", { class: "link", type: "button", onclick: clearSelection }, "→ לכל הנחלים")));
+  details.append(el("h2", {}, entry.name));
+  details.append(el("div", { class: "basin-tag" }, el("span", { class: "swatch swatch-aquifer" }), "אקוויפר · גבולות סכמטיים"));
+  const facts = el("dl", { class: "facts" });
+  const addFact = (term, value) => facts.append(el("dt", {}, term), el("dd", {}, value));
+  addFact("סלע", entry.rock);
+  if (entry.recharge) addFact("העשרה", entry.recharge);
+  if (entry.production) addFact("הפקה", entry.production);
+  if (entry.discharge) addFact("ספיקת מעיינות", entry.discharge);
+  details.append(facts);
+  details.append(el("p", { class: "summary aquifer-note" }, entry.note));
+  details.append(el("h3", {}, "נחלים שמקבלים ממנו מים"));
+  if (entry.rivers.length) {
+    const list = el("ul", { class: "tribs" });
+    // A stream split into several OSM pieces is highlighted whole but listed once.
+    const names = new Set();
+    for (const slug of entry.rivers) {
+      const id = idBySlug.get(slug);
+      if (names.has(info[id].n)) continue;
+      names.add(info[id].n);
+      list.append(el("li", {}, riverLink(id)));
+    }
+    details.append(list);
+    details.append(el("p", { class: "note" }, "רשימה חלקית: רק נחלים שמצאנו להם תימוכין."));
+  } else {
+    details.append(el("p", { class: "note" }, entry.empty));
+  }
+  details.append(el("p", { class: "note" }, "מקור: ", el("a", { href: AQUIFER_SOURCE, target: "_blank", rel: "noopener" }, "המכון הגיאולוגי, דרך Jewish Virtual Library"), ". הנתונים מתחילת שנות ה־2000."));
+}
+
+function selectAquifer(entry) {
+  selected = null;
+  aquifer = entry;
+  filter = null;
+  showAquiferShape(entry);
+  renderAquifer(entry);
+  restyle();
+  history.replaceState(null, "", `#${entry.id}`);
+  map.fitBounds(aquiferShape.getBounds(), { padding: [30, 30] });
 }
 
 function renderRiver(id) {
@@ -212,6 +298,8 @@ function renderRiver(id) {
   if (stats.count > 1) addFact("גודל האגן", `${stats.count.toLocaleString("he-IL")} נחלים, כ־${formatKm(stats.km)} ק״מ`);
   addFact("אורך", `כ־${formatKm(entry.k)} ק״מ`);
   addFact("זרימה", FLOW_LABELS[entry.f] || "אין מידע");
+  const source = aquifers.find((candidate) => candidate.rivers.includes(entry.s));
+  if (source) addFact("מקור המים", el("button", { class: "link", type: "button", onclick: () => selectAquifer(source) }, source.name));
   details.append(facts);
 
   const steps = flowPath(id);
@@ -253,6 +341,8 @@ function setShowDry(value) {
 function select(id, zoomTo) {
   if (!showDry && !flows(info[id].f)) setShowDry(true);
   selected = id;
+  aquifer = null;
+  showAquiferShape(null);
   renderRiver(id);
   restyle();
   history.replaceState(null, "", `#${encodeURIComponent(info[id].s)}`);
@@ -261,6 +351,8 @@ function select(id, zoomTo) {
 
 function clearSelection() {
   selected = null;
+  aquifer = null;
+  showAquiferShape(null);
   renderOverview();
   restyle();
   history.replaceState(null, "", location.pathname + location.search);
@@ -269,6 +361,7 @@ function clearSelection() {
 function openFromHash() {
   const slug = decodeURIComponent(location.hash.slice(1));
   if (idBySlug.has(slug)) select(idBySlug.get(slug), true);
+  else if (aquiferBySlug.has(slug)) selectAquifer(aquiferBySlug.get(slug));
 }
 
 function normalize(text) {
@@ -302,6 +395,7 @@ function renderSearch() {
 
 dryToggle.addEventListener("change", () => {
   setShowDry(dryToggle.checked);
+  if (aquifer) return;
   if (selected === null) renderOverview();
   else if (!showDry && !flows(info[selected].f)) clearSelection();
 });
@@ -317,15 +411,19 @@ document.addEventListener("click", (event) => {
 });
 map.on("zoomend", restyle);
 map.on("click", () => {
-  if (selected !== null) clearSelection();
+  if (selected !== null || aquifer) clearSelection();
 });
 window.addEventListener("hashchange", openFromHash);
 
 Promise.all([
   fetch("data/rivers.geojson").then((response) => response.json()),
   fetch("data/info.json").then((response) => response.json()),
-]).then(([geojson, infoData]) => {
+  // The stream map must keep working if this optional layer fails to load.
+  fetch("data/aquifers.json").then((response) => response.json()).catch(() => []),
+]).then(([geojson, infoData, aquiferData]) => {
   info = infoData;
+  aquifers = aquiferData;
+  for (const entry of aquifers) aquiferBySlug.set(entry.id, entry);
   for (const [id, entry] of Object.entries(info)) idBySlug.set(entry.s, Number(id));
   layer = L.geoJSON(geojson, {
     style: styleFor,

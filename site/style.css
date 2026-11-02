@@ -168,6 +168,10 @@ a { color: var(--accent); }
 
 .swatch { flex: none; width: 1.1rem; height: .3rem; border-radius: 2px; }
 
+.swatch-aquifer { height: .7rem; background: rgb(91 79 199 / 25%); border: 1px dashed #5b4fc7; }
+
+.summary.aquifer-note { margin-block-start: .8rem; }
+
 .back { margin-block-end: .7rem; font-size: .9rem; }
 
 .en { margin: .1rem 0 0; color: var(--muted); font-size: .9rem; }

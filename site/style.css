@@ -170,6 +170,24 @@ a { color: var(--accent); }
 
 .swatch-aquifer { height: .7rem; background: rgb(91 79 199 / 25%); border: 1px dashed #5b4fc7; }
 
+.chips { display: flex; flex-wrap: wrap; gap: .3rem; margin-block-end: .8rem; }
+
+.chips button {
+  padding: .2rem .6rem;
+  font: inherit;
+  font-size: .85rem;
+  color: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.chips button:hover, .chips button:focus-visible { background: var(--hover); }
+
+.chips button[aria-current] { color: #fff; background: #5b4fc7; border-color: #5b4fc7; }
+
 .summary.aquifer-note { margin-block-start: .8rem; }
 
 .back { margin-block-end: .7rem; font-size: .9rem; }
@@ -225,4 +243,6 @@ a { color: var(--accent); }
   .search { flex: 1; }
 
   #q { padding: .35rem .6rem; }
+
+  .chips { flex-wrap: nowrap; overflow-x: auto; }
 }

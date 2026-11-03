@@ -184,7 +184,18 @@ a { color: var(--accent); }
   box-shadow: none;
 }
 
-.chips { display: flex; flex-wrap: wrap; gap: .3rem; margin-block-end: .8rem; }
+/* Stays in reach while the card scrolls. */
+.chips {
+  position: sticky;
+  top: -1rem;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+  padding-block: .4rem;
+  margin-block-end: .4rem;
+  background: var(--bg);
+}
 
 .chips button {
   padding: .2rem .6rem;

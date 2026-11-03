@@ -180,6 +180,7 @@ function outsideStyle(feature) {
 function restyle() {
   if (layer) layer.setStyle(styleFor);
   if (outsideLayer) outsideLayer.setStyle(outsideStyle);
+  syncAllAquifers();
   if (allAquifersLayer) {
     allAquifersLayer.eachLayer((part) => {
       if (part.aquifer) part.setStyle(allAquifersStyle(part.aquifer));
@@ -288,20 +289,25 @@ function aquiferLatLngs(entry) {
 }
 
 function allAquifersStyle(entry) {
-  const quiet = selected !== null || aquifer;
-  return {
-    color: entry.color,
-    weight: 1.5,
-    opacity: quiet ? 0.35 : 0.9,
-    fillOpacity: quiet ? 0.03 : 0.13,
-  };
+  const [opacity, fillOpacity] = aquifer ? [0.6, 0.05] : selected !== null ? [0.35, 0.03] : [0.9, 0.13];
+  return { color: entry.color, weight: 1.5, opacity, fillOpacity };
 }
 
 function setShowAllAquifers(on) {
   showAllAquifers = on;
-  if (allAquifersLayer) allAquifersLayer.remove();
-  allAquifersLayer = null;
-  if (on) {
+  if (on) track("show_all_aquifers");
+  if (selected === null && !aquifer) renderOverview();
+  restyle();
+}
+
+// Shown on request, and while an aquifer is open so the others stay in reach.
+function syncAllAquifers() {
+  const wanted = showAllAquifers || aquifer;
+  if (!wanted && allAquifersLayer) {
+    allAquifersLayer.remove();
+    allAquifersLayer = null;
+  }
+  if (wanted && !allAquifersLayer) {
     allAquifersLayer = L.layerGroup(aquifers.map((entry) => {
       const shape = L.polygon(aquiferLatLngs(entry), { pane: "aquifers", renderer: aquiferRenderer, interactive: false, ...allAquifersStyle(entry) });
       shape.aquifer = entry;
@@ -313,10 +319,8 @@ function setShowAllAquifers(on) {
         .setContent(entry.name.replace(/^(אגן|אקוויפר)\s+/, ""))
         .addTo(allAquifersLayer);
     }
-    track("show_all_aquifers");
+    if (aquiferShape) aquiferShape.bringToFront();
   }
-  if (selected === null && !aquifer) renderOverview();
-  restyle();
 }
 
 function ringArea(ring) {
@@ -344,6 +348,30 @@ function aquifersAt(latlng) {
     .sort((a, b) => ringArea(a.ring) - ringArea(b.ring));
 }
 
+function aquifersInFocus() {
+  return selected === null && (showAllAquifers || aquifer);
+}
+
+// In an overlap each click moves on to the next aquifer there. Outside all of them, close.
+function clickMap(latlng) {
+  if (aquifersInFocus()) {
+    const here = aquifersAt(latlng);
+    if (here.length) {
+      const next = here[(here.indexOf(aquifer) + 1) % here.length];
+      if (next !== aquifer) selectAquifer(next);
+      return;
+    }
+  }
+  if (selected !== null || aquifer) clearSelection();
+}
+
+// Quieted streams lie all over the aquifers, so they must not catch the clicks meant for them.
+function clickStream(event, slug, open) {
+  L.DomEvent.stopPropagation(event);
+  if (aquifersInFocus() && !aquifer?.rivers.includes(slug)) clickMap(event.latlng);
+  else open();
+}
+
 function showAquiferShape(entry) {
   if (aquiferShape) aquiferShape.remove();
   aquiferShape = entry && L.polygon(aquiferLatLngs(entry), {
@@ -368,6 +396,7 @@ function renderAquifer(entry) {
     switcher.append(el("button", attrs, other.name.replace(/^(אגן|אקוויפר)\s+/, "")));
   }
   details.append(switcher);
+  details.append(el("p", { class: "note" }, "אפשר גם ללחוץ על אקוויפר אחר במפה."));
   details.append(el("h2", {}, entry.name));
   details.append(el("div", { class: "basin-tag" }, aquiferSwatch(entry), "אקוויפר · גבולות סכמטיים"));
   const facts = el("dl", { class: "facts" });
@@ -398,7 +427,7 @@ function renderAquifer(entry) {
   switcher.querySelector("[aria-current]").scrollIntoView({ block: "nearest", inline: "center" });
 }
 
-function selectAquifer(entry, zoomTo = true) {
+function selectAquifer(entry) {
   selected = null;
   aquifer = entry;
   filter = null;
@@ -407,7 +436,8 @@ function selectAquifer(entry, zoomTo = true) {
   track("select_aquifer", { aquifer: entry.id });
   restyle();
   history.replaceState(null, "", `#${entry.id}`);
-  if (zoomTo) map.fitBounds(aquiferShape.getBounds(), { padding: [30, 30] });
+  // Move only when needed: staying put keeps the other aquifers in view.
+  if (!map.getBounds().contains(aquiferShape.getBounds())) map.fitBounds(aquiferShape.getBounds(), { padding: [30, 30] });
 }
 
 function renderRiver(id) {
@@ -556,17 +586,7 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest(".search")) results.hidden = true;
 });
 map.on("zoomend", restyle);
-map.on("click", (event) => {
-  if (showAllAquifers && selected === null) {
-    const here = aquifersAt(event.latlng);
-    const next = here[here.indexOf(aquifer) + 1];
-    if (next) {
-      selectAquifer(next, false);
-      return;
-    }
-  }
-  if (selected !== null || aquifer) clearSelection();
-});
+map.on("click", (event) => clickMap(event.latlng));
 window.addEventListener("hashchange", openFromHash);
 
 Promise.all([
@@ -590,10 +610,9 @@ Promise.all([
           outsideBySlug.get(s).push(line);
         }
         line.bindTooltip(s ? `המשך של ${n}` : n, { sticky: true, direction: "top" });
-        line.on("click", (event) => {
-          L.DomEvent.stopPropagation(event);
+        line.on("click", (event) => clickStream(event, null, () => {
           if (s) select(idBySlug.get(s), false);
-        });
+        }));
       },
     }).addTo(map);
     // Panning reaches these lines; the zoom limit still stops at all of Israel.
@@ -604,10 +623,7 @@ Promise.all([
     onEachFeature(feature, line) {
       layersById.set(feature.properties.i, line);
       line.bindTooltip(feature.properties.n, { sticky: true, direction: "top" });
-      line.on("click", (event) => {
-        L.DomEvent.stopPropagation(event);
-        select(feature.properties.i, false);
-      });
+      line.on("click", (event) => clickStream(event, info[feature.properties.i].s, () => select(feature.properties.i, false)));
     },
   }).addTo(map);
   const dryCount = Object.values(info).filter((entry) => !flows(entry.f)).length;

@@ -50,5 +50,5 @@
   {"name": "נחל לוץ", "sink": "arish", "via": "osm"},
   {"name": "נחל בתור", "sink": "arish", "via": "osm"},
   {"name": "נחל קדש ברנע", "sink": "arish", "via": "osm"},
-  {"name": "ואדי רם", "sink": "gulf", "via": "dem"}
+  {"name": "ואדי רם", "sink": "gulf", "via": "route"}
 ]

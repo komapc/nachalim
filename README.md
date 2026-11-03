@@ -34,7 +34,7 @@ With unchanged downloads and Wikipedia cache the output is byte-identical, so af
 
 - `build_rivers.py` groups named OpenStreetMap waterways into streams, follows the flow downstream to find each stream's parent, and classifies the outlet. Corrections go in `scripts/overrides.json`. It also writes `skipped.json`, the way names it rejected.
 - `enrich_wiki.py` adds Hebrew Wikipedia summaries and writes `rivers.geojson` and `info.json`. Arabic text is removed from the summaries.
-- `build_outside.py` continues streams past the download box, as thin lines. They follow OpenStreetMap ways only. Where the ways do not join end to end, `scripts/outlet_joins.json` holds the path along them, which `join_outlets.py` finds and which is committed. A line stops where the ways stop: Nahal Lavan about 4 km short of Wadi al-Arish, Wadi al-Arish about 350 m short of the sea, and Wadi Rum at the end of its mapped stretch. The zoom-out limit still fits Israel; only panning reaches these lines.
+- `build_outside.py` continues streams past the download box, as thin lines. They follow OpenStreetMap ways, except for the stretch of Wadi Rum described below. Where the ways do not join end to end, `scripts/outlet_joins.json` holds the path along them, which `join_outlets.py` finds and which is committed. A line stops where the ways stop: Nahal Lavan about 4 km short of Wadi al-Arish and Wadi al-Arish about 350 m short of the sea. The zoom-out limit still fits Israel; only panning reaches these lines.
 
 Each rule in `overrides.json` names a stream and can set `sink`, `parent`, `flow` and `via`.
 
@@ -42,7 +42,7 @@ Each rule in `overrides.json` names a stream and can set `sink`, `parent`, `flow
 
 Flow type comes from `overrides.json`, then the opening of the Hebrew Wikipedia article, then OpenStreetMap tags, whose `intermittent` tag is often wrong.
 
-A basin here is the set of streams that reach the same top-level stream. Where an OpenStreetMap line stops short of its outlet, `overrides.json` records the outlet with `via`: `wiki` means Hebrew Wikipedia says so, `dem` means it was traced downhill on the Copernicus GLO-30 elevation model, and `osm` means OpenStreetMap ways lead there past the download box. No traced line is drawn on the map. Those rules apply only to a stream that is still untraced, not to namesakes. A stream whose outlet could not be established would be shown grey and explained in the legend, rather than guessed; at present there are none.
+A basin here is the set of streams that reach the same top-level stream. Where an OpenStreetMap line stops short of its outlet, `overrides.json` records the outlet with `via`: `wiki` means Hebrew Wikipedia says so, `dem` means it was traced downhill on the Copernicus GLO-30 elevation model, and `osm` means OpenStreetMap ways lead there past the download box. `route` means the same for Wadi Rum, whose line is also drawn: the only traced line on the map, about 34 km over the Hisma where OpenStreetMap has none, then along OpenStreetMap ways. Those rules apply only to a stream that is still untraced, not to namesakes. A stream whose outlet could not be established would be shown grey and explained in the legend, rather than guessed; at present there are none.
 
 Twelve streams of the southern Arava end in the Yotvata salt flat, shown as a closed basin rather than the Gulf of Eilat. On Copernicus GLO-30 at full 30 m the depression covers about 97 km², with a floor at 48 m and the lowest rim at 77 m, and Hebrew Wikipedia describes the flat as a closed depression. The Evrona flat further south shows no such rim, which fits published work that it is now open, so its streams stay in the Gulf group.
 
@@ -62,7 +62,7 @@ Twelve streams of the southern Arava end in the Yotvata salt flat, shown as a cl
 | `k` | Length in km |
 | `sink` | Where its basin ends: `med`, `gulf`, `dead`, `kinneret`, `hula`, `arish`, `yotvata`, or `null` |
 | `f` | Flow: `perennial`, `mixed`, `intermittent`, or absent if unknown |
-| `v` | How the outlet was established when the line stops short: `wiki`, `dem` or `osm` |
+| `v` | How the outlet was established when the line stops short: `wiki`, `dem`, `osm` or `route` |
 | `w`, `x` | Wikipedia page title and summary |
 
 `rivers.geojson` holds the geometry, with properties `i` (the id), `d`, `k`, `n` and `f`. `outside.geojson` holds the lines past the box, with `s` and `n`.

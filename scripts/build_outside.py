@@ -3,15 +3,18 @@
 
 Usage: build_outside.py RAW_WAYS RAW_OUTSIDE_DIR RIVERS_JSON INFO_JSON TRACES_JSON OUT_GEOJSON
 Writes lines only for streams that really leave the box. Standard library only.
+
+Each feature has s (the stream's slug, or null for Wadi al-Arish itself), n (its name)
+and src ("osm" for a mapped way, "dem" for a line traced on the elevation model).
 """
 import collections
 import json
 import pathlib
 import sys
 
-from build_rivers import length_km, simplify
+from build_rivers import length_km, read_json, simplify, write_json
 
-BOX = (34.2, 29.45, 35.95, 33.45)
+BOX = (34.2, 29.45, 35.95, 33.45)  # the main download in fetch_osm.sh
 MIN_KM = 1
 ARISH = "ואדי אל-עריש"
 
@@ -27,7 +30,7 @@ def in_box(point):
 def load_ways(ways_path, outside_dir):
     ways = {}
     for path in [ways_path, *sorted(pathlib.Path(outside_dir).glob("*.json"))]:
-        for way in json.load(open(path, encoding="utf-8"))["elements"]:
+        for way in read_json(path)["elements"]:
             if way.get("geometry"):
                 ways[way["id"]] = {"tags": way.get("tags", {}), "pts": [key(p) for p in way["geometry"]]}
     return ways
@@ -49,6 +52,8 @@ def owners(ways, rivers):
 
 
 class Network:
+    """Ways joined only at exact shared end points, as digitised in OSM."""
+
     def __init__(self, ways, owned):
         self.ways, self.owned = ways, owned
         self.starting, self.ending = collections.defaultdict(list), collections.defaultdict(list)
@@ -57,6 +62,7 @@ class Network:
             self.ending[way["pts"][-1]].append(way_id)
 
     def downstream(self, start, own):
+        """The points reached from start, on ways that are free or belong to stream own."""
         points, here, seen = [], start, set()
         while True:
             options = [w for w in self.starting[here] if w not in seen and self.owned.get(w, own) == own]
@@ -95,43 +101,48 @@ def feature(points, slug, name, source):
             "geometry": {"type": "LineString", "coordinates": line}}
 
 
+def river_features(river, slug, network, traces):
+    """The lines that continue one stream, past its mouth and above its head."""
+    features = []
+    if river["parent"] is None and river["mouth"]:
+        # The mapped lines can stop before the mouth: keep the walk that passes it.
+        mouth = (round(river["mouth"][0], 5), round(river["mouth"][1], 5))
+        walks = [network.downstream(tuple(line[-1]), river["id"]) for line in river["lines"]]
+        through = [walk for walk in walks if mouth in walk]
+        points = max(through, key=length_km) if through else network.downstream(mouth, river["id"])
+        if not through and river["name"] in traces["joins"]:
+            features.append(feature(max(walks, key=length_km), slug, river["name"], "osm"))
+            features.append(feature(traces["joins"][river["name"]], slug, river["name"], "dem"))
+        # A stream draining to Sinai is drawn from its mouth, even inside the box.
+        leaves = river["sink"] == "arish" or not all(in_box(p) for p in points)
+        if length_km(points) >= MIN_KM and leaves:
+            features.append(feature(points, slug, river["name"], "osm"))
+    heads = {tuple(line[0]) for line in river["lines"]}
+    points = max((network.upstream(head) for head in heads), key=length_km, default=[])
+    if length_km(points) >= MIN_KM and not all(in_box(p) for p in points):
+        features.append(feature(points, slug, river["name"], "osm"))
+    if river["parent"] is None and river["name"] in traces["streams"]:
+        features.append(feature(traces["streams"][river["name"]], slug, river["name"], "dem"))
+    return features
+
+
 def main():
-    sys.setrecursionlimit(5000)
+    sys.setrecursionlimit(5000)  # Network.upstream recurses along the way chain
     ways_path, outside_dir, rivers_path, info_path, traces_path, out_path = sys.argv[1:7]
-    rivers = json.load(open(rivers_path, encoding="utf-8"))
-    info = json.load(open(info_path, encoding="utf-8"))
-    traces = json.load(open(traces_path, encoding="utf-8"))
+    rivers = read_json(rivers_path)
+    info = read_json(info_path)
+    traces = read_json(traces_path)
     ways = load_ways(ways_path, outside_dir)
     network = Network(ways, owners(ways, rivers))
     features = []
     for river in rivers:
-        slug = info[str(river["id"])]["s"]
-        if river["parent"] is None and river["mouth"]:
-            # The mapped lines can stop before the mouth: keep the walk that passes it.
-            mouth = (round(river["mouth"][0], 5), round(river["mouth"][1], 5))
-            walks = [network.downstream(tuple(line[-1]), river["id"]) for line in river["lines"]]
-            through = [walk for walk in walks if mouth in walk]
-            points = max(through, key=length_km) if through else network.downstream(mouth, river["id"])
-            if not through and river["name"] in traces["joins"]:
-                features.append(feature(max(walks, key=length_km), slug, river["name"], "osm"))
-                features.append(feature(traces["joins"][river["name"]], slug, river["name"], "dem"))
-            # A stream draining to Sinai is drawn from its mouth, even inside the box.
-            leaves = river["sink"] == "arish" or not all(in_box(p) for p in points)
-            if length_km(points) >= MIN_KM and leaves:
-                features.append(feature(points, slug, river["name"], "osm"))
-        heads = {tuple(line[0]) for line in river["lines"]}
-        points = max((network.upstream(head) for head in heads), key=length_km, default=[])
-        if length_km(points) >= MIN_KM and not all(in_box(p) for p in points):
-            features.append(feature(points, slug, river["name"], "osm"))
-        if river["parent"] is None and river["name"] in traces["streams"]:
-            features.append(feature(traces["streams"][river["name"]], slug, river["name"], "dem"))
+        features += river_features(river, info[str(river["id"])]["s"], network, traces)
     for way in ways.values():
         if "Arish" in way["tags"].get("name:en", ""):
             features.append(feature(way["pts"], None, ARISH, "osm"))
     for gap in traces["arish_gaps"]:
         features.append(feature(gap, None, ARISH, "dem"))
-    json.dump({"type": "FeatureCollection", "features": features}, open(out_path, "w", encoding="utf-8"),
-              ensure_ascii=False, separators=(",", ":"))
+    write_json(out_path, {"type": "FeatureCollection", "features": features})
     summary = collections.Counter()
     for f in features:
         summary[f["properties"]["n"], f["properties"]["src"]] += round(length_km(f["geometry"]["coordinates"]))

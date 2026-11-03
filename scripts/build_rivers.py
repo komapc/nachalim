@@ -2,7 +2,15 @@
 """Build river entities with downstream parents and basins from raw OSM exports.
 
 Usage: build_rivers.py WAYS_JSON SINKS_JSON OUT_DIR
-Writes OUT_DIR/rivers.json (attributes + geometry). Standard library only.
+Writes to OUT_DIR, standard library only:
+  rivers.json   attributes and geometry, the input of the next pipeline steps
+  skipped.json  way names that NAME_RE rejected, with counts: review it for streams
+                the filter should have kept
+
+An entity is one named stream: OSM ways with the same name that lie close together
+or share a Wikidata item. Its parent is the entity its flow runs into; a stream with
+no parent is a root and ends in a sink (a sea or lake), or in None if the walk found
+neither. The steps run in the order listed in main().
 """
 import collections
 import json
@@ -12,8 +20,19 @@ import re
 import sys
 
 NAME_RE = re.compile(r"^(נחל|נהר|ואדי|וואדי|ערוץ|יובל|עין)\b|הירדן|ירמוך")
-SNAP_M = 120
+SNAP_M = 120  # a way ending this close to another one is taken to flow into it
+SAME_STREAM_M = 3000  # same-named ways this close are pieces of one stream
 OVERRIDES_PATH = pathlib.Path(__file__).with_name("overrides.json")
+
+
+def read_json(path):
+    with open(path, encoding="utf-8") as file:
+        return json.load(file)
+
+
+def write_json(path, data):
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(data, file, ensure_ascii=False, separators=(",", ":"))
 
 
 def is_hebrew(text):
@@ -86,7 +105,7 @@ class Grid:
 
 def load_ways(path):
     ways = []
-    for el in json.load(open(path, encoding="utf-8"))["elements"]:
+    for el in read_json(path)["elements"]:
         geom = el.get("geometry")
         if not geom or len(geom) < 2:
             continue
@@ -103,12 +122,17 @@ LAKES = {
     "hula": (35.585, 33.085, 35.635, 33.12),
 }
 COAST_RADIUS_M = 2500
+# When a stream's ways end in different places, the lowest final sink wins.
+SINK_RANK = {"dead": 0, "gulf": 0, "yotvata": 0, "med": 0, "kinneret": 1, "hula": 2}
+PARENT_RANK = 3  # a parent stream counts for less than reaching a sink directly
+UNKNOWN_SINK_RANK = 5  # a sink set by a future rule that is missing from SINK_RANK
+DEAD_END_RANK = 6
 
 
 def load_sinks(path):
     """Return {"med"|"gulf": Grid of coastline points}."""
     grids = {"med": Grid(0.02), "gulf": Grid(0.02)}
-    for el in json.load(open(path, encoding="utf-8"))["elements"]:
+    for el in read_json(path)["elements"]:
         if el.get("tags", {}).get("natural") != "coastline":
             continue
         for g in el.get("geometry", []):
@@ -118,23 +142,26 @@ def load_sinks(path):
 
 
 def classify_sink(point, grids):
+    """Name the sink at a stream's last point, or None if it is not near any."""
+    lon, lat = point
     for sink, (x0, y0, x1, y1) in LAKES.items():
-        if x0 <= point[0] <= x1 and y0 <= point[1] <= y1:
+        if x0 <= lon <= x1 and y0 <= lat <= y1:
             return sink
     for sink, grid in grids.items():
         if next(grid.near(point, COAST_RADIUS_M), None):
             return sink
-    # Yotvata basin: a closed depression, 30 m deep on Copernicus GLO-30 (floor 48 m,
-    # lowest rim 77 m) and described as having no outlet. Floods do not reach the sea.
-    if 29.74 <= point[1] < 29.95 and 34.95 <= point[0] < 35.2:
-        return "yotvata"
-    # Southern Arava: streams fade out on the valley floor, south of the divide.
-    if point[1] < 29.95 and 34.95 <= point[0] < 35.2:
+    if lat < 29.95 and 34.95 <= lon < 35.2:
+        # Yotvata basin: a closed depression, 30 m deep on Copernicus GLO-30 (floor 48 m,
+        # lowest rim 77 m) and described as having no outlet. Floods do not reach the sea.
+        if lat >= 29.74:
+            return "yotvata"
+        # Southern Arava: streams fade out on the valley floor, south of the divide.
         return "gulf"
     return None
 
 
 def build_entities(ways):
+    """Group ways into streams. Returns (entities, Counter of rejected names)."""
     by_name = collections.defaultdict(list)
     skipped = collections.Counter()
     for way in ways:
@@ -162,7 +189,7 @@ def build_entities(ways):
                 same_qid = a["tags"].get("wikidata") and a["tags"].get("wikidata") == b["tags"].get("wikidata")
                 ends = ((a["pts"][0], b["pts"][0]), (a["pts"][0], b["pts"][-1]),
                         (a["pts"][-1], b["pts"][0]), (a["pts"][-1], b["pts"][-1]))
-                if same_qid or any(dist_m(p, q) <= 3000 for p, q in ends):
+                if same_qid or any(dist_m(p, q) <= SAME_STREAM_M for p, q in ends):
                     parent[find(i)] = find(j)
         groups = collections.defaultdict(list)
         for i, way in enumerate(members):
@@ -176,6 +203,8 @@ def build_entities(ways):
 
 
 class Network:
+    """The waterway graph, for following the flow from one way to the next."""
+
     def __init__(self, ways):
         self.ways = ways
         self.at_node = collections.defaultdict(list)
@@ -195,6 +224,7 @@ class Network:
         return [v for _, v in self.grid.near(point, SNAP_M) if v[0] not in exclude]
 
     def rank(self, candidate, own):
+        """Prefer staying on this stream, then any named stream, then rivers over streams."""
         way = self.ways[candidate[0]]
         kind = way["tags"].get("waterway")
         return (way["entity"] == own, way["entity"] is not None,
@@ -217,22 +247,26 @@ class Network:
         return None, point
 
 
+def outlet_rank(option):
+    target, sink, _ = option
+    if sink:
+        return SINK_RANK.get(sink, UNKNOWN_SINK_RANK)
+    return PARENT_RANK if target is not None else DEAD_END_RANK
+
+
 def resolve(entities, ways, grids):
+    """Set each entity's parent, sink and mouth by walking downstream from its ways."""
     net = Network(ways)
+    options = collections.defaultdict(list)
+    for w, way in enumerate(ways):
+        own = way["entity"]
+        if own is None:
+            continue
+        target, end = net.walk(w, own)
+        sink = classify_sink(end, grids) if target is None else None
+        options[own].append((target, sink, end))
     for entity in entities:
-        own = entity["idx"]
-        ids = {id(w) for w in entity["ways"]}
-        options = []
-        for w, way in enumerate(ways):
-            if id(way) not in ids:
-                continue
-            target, end = net.walk(w, own)
-            sink = classify_sink(end, grids) if target is None else None
-            options.append((target, sink, end))
-        # A sink reached directly wins, the lowest final sink first; then a parent.
-        order = {"dead": 0, "gulf": 0, "yotvata": 0, "med": 0, "kinneret": 1, "hula": 2}
-        options.sort(key=lambda o: (order.get(o[1], 5) if o[1] else (3 if o[0] is not None else 6)))
-        entity["parent"], entity["sink"], entity["mouth"] = options[0]
+        entity["parent"], entity["sink"], entity["mouth"] = min(options[entity["idx"]], key=outlet_rank)
 
     # Break any cycles created by mis-digitised flow direction.
     for entity in entities:
@@ -252,13 +286,13 @@ def resolve(entities, ways, grids):
 def merge_same_name(entities):
     """Fold a fragment into its parent when both carry the same name."""
     alive = {e["idx"]: e for e in entities}
+    moved = {}
 
     def live(idx):
         while idx not in alive:
             idx = moved[idx]
         return idx
 
-    moved = {}
     for entity in entities:
         parent = entity["parent"]
         if parent is None:
@@ -275,12 +309,11 @@ def merge_same_name(entities):
 
 
 def apply_overrides(entities):
-    if not OVERRIDES_PATH.exists():
-        return
+    """Apply scripts/overrides.json, the hand-made corrections, by stream name."""
     by_name = collections.defaultdict(list)
     for entity in entities:
         by_name[entity["name"]].append(entity)
-    for rule in json.load(open(OVERRIDES_PATH, encoding="utf-8")):
+    for rule in read_json(OVERRIDES_PATH):
         for entity in by_name.get(rule["name"], []):
             # Outlet research applies only to the untraced stream, not to namesakes.
             if "via" in rule:
@@ -297,7 +330,39 @@ def apply_overrides(entities):
                 entity["flow"] = rule["flow"]
 
 
+def summarize(entity, entities):
+    """The rivers.json record of one entity."""
+    root = entity
+    while root["parent"] is not None:
+        root = entities[root["parent"]]
+    tags = collections.Counter()
+    total = wet = dry = 0
+    for way in entity["ways"]:
+        for key in ("wikidata", "wikipedia", "name:en"):
+            if way["tags"].get(key):
+                tags[(key, way["tags"][key])] += 1
+        km = length_km(way["pts"])
+        total += km
+        if way["tags"].get("intermittent") == "no" or way["tags"].get("seasonal") == "no":
+            wet += km
+        elif way["tags"].get("intermittent") == "yes":
+            dry += km
+    best = {}  # the most common value of each tag
+    for (key, value), _ in tags.most_common():
+        best.setdefault(key, value)
+    return {
+        "id": entity["idx"], "name": entity["name"],
+        "parent": entity["parent"],
+        "root": root["idx"], "sink": root["sink"],
+        "km": round(total, 1), "perennial_km": round(wet, 1), "intermittent_km": round(dry, 1),
+        "mouth": entity["mouth"], "tags": best, "flow": entity.get("flow"), "via": entity.get("via"),
+        "lines": [[[round(x, 5), round(y, 5)] for x, y in simplify(w["pts"])] for w in entity["ways"]],
+    }
+
+
 def main():
+    if len(sys.argv) != 4:
+        sys.exit(__doc__)
     ways_path, sinks_path, out_dir = sys.argv[1:4]
     ways = load_ways(ways_path)
     grids = load_sinks(sinks_path)
@@ -312,42 +377,9 @@ def main():
             e["parent"] = remap[e["parent"]]
     apply_overrides(entities)
 
-    def root_of(entity):
-        chain, node = [], entity
-        while node["parent"] is not None:
-            node = entities[node["parent"]]
-            chain.append(node["idx"])
-        return node, chain
-
-    out = []
-    for entity in entities:
-        root, chain = root_of(entity)
-        tags = collections.Counter()
-        total = wet = dry = 0
-        for way in entity["ways"]:
-            for key in ("wikidata", "wikipedia", "name:en", "name:ar"):
-                if way["tags"].get(key):
-                    tags[(key, way["tags"][key])] += 1
-            km = length_km(way["pts"])
-            total += km
-            if way["tags"].get("intermittent") == "no" or way["tags"].get("seasonal") == "no":
-                wet += km
-            elif way["tags"].get("intermittent") == "yes":
-                dry += km
-        best = {}
-        for (key, value), _ in tags.most_common():
-            best.setdefault(key, value)
-        out.append({
-            "id": entity["idx"], "name": entity["name"],
-            "parent": entity["parent"], "chain": chain,
-            "root": root["idx"], "sink": root["sink"],
-            "km": round(total, 1), "perennial_km": round(wet, 1), "intermittent_km": round(dry, 1),
-            "mouth": entity["mouth"], "tags": best, "flow": entity.get("flow"), "via": entity.get("via"),
-            "lines": [[[round(x, 5), round(y, 5)] for x, y in simplify(w["pts"])] for w in entity["ways"]],
-        })
     pathlib.Path(out_dir).mkdir(parents=True, exist_ok=True)
-    json.dump(out, open(f"{out_dir}/rivers.json", "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
-    json.dump(skipped.most_common(), open(f"{out_dir}/skipped.json", "w", encoding="utf-8"), ensure_ascii=False)
+    write_json(f"{out_dir}/rivers.json", [summarize(e, entities) for e in entities])
+    write_json(f"{out_dir}/skipped.json", skipped.most_common())
 
 
 if __name__ == "__main__":

@@ -2,8 +2,13 @@
 """Trace outlets the OSM network does not connect, downhill on Copernicus GLO-30.
 
 Usage: trace_outlets.py RAW_OUTSIDE_DIR RIVERS_JSON OUT_JSON
-Needs rasterio and numpy. The result is committed, so a normal rebuild does not
-need this script or the elevation data.
+Needs rasterio and numpy, and reads the elevation tiles over the network. The result
+is committed, so a normal rebuild does not need this script or the elevation data.
+
+Writes JSON read by build_outside.py, every line a list of [lon, lat]:
+  arish_gaps  the gaps between the OSM pieces of Wadi al-Arish, down to the sea
+  streams     {name: line} from where a stream ends to its outlet
+  joins       {name: line} over a break in OSM inside one stream's course
 """
 import heapq
 import json

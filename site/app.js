@@ -1,7 +1,14 @@
 "use strict";
 
+// The whole interface: the map, the side panel and the links between them. The data
+// files and their keys are described in the README.
+
+// ---- Constants ----
+
+// Analytics event; gtag exists only after the visitor agreed, see consent.js.
 const track = (name, params) => window.gtag?.("event", name, params);
 
+// Line colours by where the water ends up. make_og.py repeats the colours.
 const DRAINAGE = {
   med: { label: "הים התיכון", color: "#1f78c1" },
   jordan: { label: "הירדן והכנרת", color: "#0b9a8d" },
@@ -42,6 +49,13 @@ const results = document.getElementById("results");
 const ISRAEL = L.latLngBounds([29.47, 34.24], [33.36, 35.92]);
 const BASEMAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 const SHIELD_LAYER = /shield/;
+const JORDAN_SLUG = "נהר-הירדן";
+
+// How far a line fades when something else is the subject of the map.
+const OPACITY_DIMMED = 0.15;
+const OPACITY_QUIET = 0.3;
+
+// ---- Map and base map ----
 
 const map = L.map("map", {
   preferCanvas: true,
@@ -64,7 +78,8 @@ map.fitBounds(ISRAEL, { animate: false });
 map.setMinZoom(map.getBoundsZoom(ISRAEL));
 map.on("resize", fitIsrael);
 
-// A diagram under the streams: never takes clicks, so streams stay selectable.
+// A diagram under the streams. Their canvas covers this pane and would catch any click
+// first, so the polygons are not interactive and clickMap tests the point against them.
 map.createPane("aquifers").style.zIndex = 350;
 const aquiferRenderer = L.svg({ pane: "aquifers" });
 
@@ -91,21 +106,30 @@ fetch(BASEMAP_STYLE)
     }).addTo(map);
   });
 
-let info = {};
+// ---- State ----
+
+// The panel follows from selected and aquifer, of which at most one is set:
+//   neither   the overview
+//   selected  a stream's card, by id
+//   aquifer   an aquifer's card, by entry
+// showAllAquifers only adds the aquifers to the map. They are also drawn while one is open.
+let info = {}; // id -> stream, from info.json
 let layer = null;
 let outsideLayer = null;
 const outsideBySlug = new Map();
 let selected = null;
-let filter = null;
+let filter = null; // drainage key chosen in the legend
 let showDry = true;
 let aquifers = [];
 let aquifer = null;
-let aquiferShape = null;
+let aquiferShape = null; // the open aquifer's outline, drawn over allAquifersLayer
 let showAllAquifers = false;
 let allAquifersLayer = null;
 const aquiferBySlug = new Map();
 const layersById = new Map();
 const idBySlug = new Map();
+
+// ---- Line styles ----
 
 const flows = (flow) => flow === "perennial" || flow === "mixed";
 
@@ -127,13 +151,13 @@ function styleFor(feature) {
   let opacity = k < 3 && zoom < 9.5 ? 0.35 : 0.85;
   let weight = weightFor(k, zoom);
   if (filter && d !== filter) opacity = 0.08;
-  if (riversQuiet()) opacity = Math.min(opacity, 0.3);
+  if (riversQuiet()) opacity = Math.min(opacity, OPACITY_QUIET);
   if (aquifer) {
-    if (aquifer.rivers.includes(info[i].s)) {
+    if (aquifer.rivers.includes(entry.s)) {
       opacity = 1;
       weight += 2;
     } else {
-      opacity = Math.min(opacity, 0.15);
+      opacity = Math.min(opacity, OPACITY_DIMMED);
     }
   }
   if (selected !== null) {
@@ -145,7 +169,7 @@ function styleFor(feature) {
       opacity = 0.95;
       weight += 0.6;
     } else {
-      opacity = Math.min(opacity, 0.15);
+      opacity = Math.min(opacity, OPACITY_DIMMED);
     }
   }
   const dashArray = !flows(f) && zoom >= 10 && i !== selected ? "6 6" : null;
@@ -162,8 +186,8 @@ function outsideStyle(feature) {
   let weight = 1.6 + Math.max(0, map.getZoom() - 9) * 0.25;
   if (!showDry && dry) opacity = 0;
   if (filter && drainage !== filter) opacity = 0.08;
-  if (riversQuiet()) opacity = Math.min(opacity, 0.3);
-  if (aquifer) opacity = Math.min(opacity, 0.15);
+  if (riversQuiet()) opacity = Math.min(opacity, OPACITY_QUIET);
+  if (aquifer) opacity = Math.min(opacity, OPACITY_DIMMED);
   if (selected !== null) {
     const current = info[selected];
     const sameBasin = entry ? entry.r === current.r : current.sink === "arish";
@@ -171,12 +195,13 @@ function outsideStyle(feature) {
       opacity = 1;
       weight += 1;
     } else {
-      opacity = Math.min(opacity, 0.15);
+      opacity = Math.min(opacity, OPACITY_DIMMED);
     }
   }
   return { color: DRAINAGE[drainage].color, weight, opacity, dashArray: src === "dem" ? "2 6" : null, lineCap: "round" };
 }
 
+// Brings the map in line with the state. Call it after any change to the state.
 function restyle() {
   if (layer) layer.setStyle(styleFor);
   if (outsideLayer) outsideLayer.setStyle(outsideStyle);
@@ -189,6 +214,8 @@ function restyle() {
   if (selected !== null) layersById.get(selected).bringToFront();
 }
 
+// ---- Panel helpers ----
+
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {
@@ -199,9 +226,22 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
-function riverLink(id) {
-  return el("button", { class: "link", type: "button", onclick: () => select(id, true) }, info[id].n);
+function linkButton(text, onclick) {
+  return el("button", { class: "link", type: "button", onclick }, text);
 }
+
+function riverLink(id) {
+  return linkButton(info[id].n, () => select(id, true));
+}
+
+// Empties the panel for a card and adds the way back to the overview.
+function startCard() {
+  details.replaceChildren();
+  details.scrollTop = 0;
+  details.append(el("div", { class: "back" }, linkButton("→ לכל הנחלים", clearSelection)));
+}
+
+// The steps from a stream to the sea: links to parent streams, then plain sink names.
 
 function flowPath(id) {
   const steps = [];
@@ -211,11 +251,11 @@ function flowPath(id) {
     steps.push(riverLink(current));
   }
   const sink = info[current].sink;
-  const jordan = Object.keys(info).find((key) => info[key].n === "נהר הירדן");
+  const jordan = idBySlug.get(JORDAN_SLUG);
   if (sink === "kinneret" || sink === "hula") {
     steps.push(SINK_NAMES[sink]);
     if (sink === "hula") steps.push("הכנרת");
-    if (jordan !== undefined) steps.push(riverLink(Number(jordan)));
+    if (jordan !== undefined) steps.push(riverLink(jordan));
     steps.push(SINK_NAMES.dead);
   } else if (sink === "arish") {
     steps.push(SINK_NAMES.arish, SINK_NAMES.med);
@@ -238,6 +278,8 @@ function basinStats(rootId) {
 }
 
 const formatKm = (km) => (km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString("he-IL"));
+
+// ---- Overview ----
 
 function renderOverview() {
   details.replaceChildren();
@@ -280,10 +322,18 @@ function renderOverview() {
   }
 }
 
+// ---- Aquifers ----
+
+// The name without "basin" or "aquifer", for labels and chips.
+function shortName(entry) {
+  return entry.name.replace(/^(אגן|אקוויפר)\s+/, "");
+}
+
 function aquiferSwatch(entry) {
   return el("span", { class: "swatch swatch-aquifer", style: `background:${entry.color}40;border-color:${entry.color}` });
 }
 
+// The file keeps GeoJSON order, [lng, lat]; Leaflet wants [lat, lng].
 function aquiferLatLngs(entry) {
   return entry.ring.map(([lng, lat]) => [lat, lng]);
 }
@@ -315,14 +365,15 @@ function syncAllAquifers() {
     })).addTo(map);
     for (const entry of aquifers) {
       L.tooltip({ permanent: true, direction: "center", className: "aquifer-label", pane: "tooltipPane" })
-        .setLatLng(entry.label ? [entry.label[1], entry.label[0]] : L.polygon(aquiferLatLngs(entry)).getBounds().getCenter())
-        .setContent(entry.name.replace(/^(אגן|אקוויפר)\s+/, ""))
+        .setLatLng(entry.label ? [entry.label[1], entry.label[0]] : L.latLngBounds(aquiferLatLngs(entry)).getCenter())
+        .setContent(shortName(entry))
         .addTo(allAquifersLayer);
     }
     if (aquiferShape) aquiferShape.bringToFront();
   }
 }
 
+// Shoelace formula in degrees: good enough to compare aquifers with each other.
 function ringArea(ring) {
   let sum = 0;
   ring.forEach(([x0, y0], index) => {
@@ -332,6 +383,7 @@ function ringArea(ring) {
   return Math.abs(sum) / 2;
 }
 
+// Ray casting: a point is inside if a ray from it crosses the ring an odd number of times.
 function ringContains(ring, lng, lat) {
   let inside = false;
   ring.forEach(([x0, y0], index) => {
@@ -348,6 +400,7 @@ function aquifersAt(latlng) {
     .sort((a, b) => ringArea(a.ring) - ringArea(b.ring));
 }
 
+// When true, a click on the map is about aquifers rather than streams.
 function aquifersInFocus() {
   return selected === null && (showAllAquifers || aquifer);
 }
@@ -386,14 +439,12 @@ function showAquiferShape(entry) {
 }
 
 function renderAquifer(entry) {
-  details.replaceChildren();
-  details.scrollTop = 0;
-  details.append(el("div", { class: "back" }, el("button", { class: "link", type: "button", onclick: clearSelection }, "→ לכל הנחלים")));
+  startCard();
   const switcher = el("nav", { class: "chips", "aria-label": "מעבר בין אקוויפרים" });
   for (const other of aquifers) {
     const attrs = { type: "button", onclick: () => selectAquifer(other) };
     if (other === entry) attrs["aria-current"] = "true";
-    switcher.append(el("button", attrs, other.name.replace(/^(אגן|אקוויפר)\s+/, "")));
+    switcher.append(el("button", attrs, shortName(other)));
   }
   details.append(switcher);
   details.append(el("p", { class: "note" }, "אפשר גם ללחוץ על אקוויפר אחר במפה."));
@@ -440,15 +491,15 @@ function selectAquifer(entry) {
   if (!map.getBounds().contains(aquiferShape.getBounds())) map.fitBounds(aquiferShape.getBounds(), { padding: [30, 30] });
 }
 
+// ---- Stream card ----
+
 function renderRiver(id) {
   const entry = info[id];
   const root = info[entry.r];
   const drainage = DRAINAGE[entry.d];
-  details.replaceChildren();
-  details.scrollTop = 0;
-  details.append(el("div", { class: "back" }, el("button", { class: "link", type: "button", onclick: clearSelection }, "→ לכל הנחלים")));
+  startCard();
   details.append(el("h2", {}, entry.n));
-  if (entry.en) details.append(el("p", { class: "en", lang: "en", dir: "ltr", style: "text-align:right" }, entry.en));
+  if (entry.en) details.append(el("p", { class: "en", lang: "en", dir: "ltr" }, entry.en));
   details.append(el("div", { class: "basin-tag" }, el("span", { class: "swatch", style: `background:${drainage.color}` }), drainage.label));
 
   const facts = el("dl", { class: "facts" });
@@ -457,13 +508,13 @@ function renderRiver(id) {
   if (entry.d === "unknown") {
     addFact("אגן", "לא זוהה");
   } else {
-    addFact("אגן", entry.r === id ? `אגן ${entry.n}` : el("button", { class: "link", type: "button", onclick: () => select(entry.r, true) }, `אגן ${root.n}`));
+    addFact("אגן", entry.r === id ? `אגן ${entry.n}` : linkButton(`אגן ${root.n}`, () => select(entry.r, true)));
   }
   if (stats.count > 1) addFact("גודל האגן", `${stats.count.toLocaleString("he-IL")} נחלים, כ־${formatKm(stats.km)} ק״מ`);
   addFact("אורך", `כ־${formatKm(entry.k)} ק״מ`);
   addFact("זרימה", FLOW_LABELS[entry.f] || "אין מידע");
   const source = aquifers.find((candidate) => candidate.rivers.includes(entry.s));
-  if (source) addFact("מקור המים", el("button", { class: "link", type: "button", onclick: () => selectAquifer(source) }, source.name));
+  if (source) addFact("מקור המים", linkButton(source.name, () => selectAquifer(source)));
   details.append(facts);
 
   const steps = flowPath(id);
@@ -493,6 +544,8 @@ function renderRiver(id) {
   }
 }
 
+// ---- Changing the state ----
+
 function setShowDry(value) {
   showDry = value;
   dryToggle.checked = value;
@@ -504,6 +557,7 @@ function setShowDry(value) {
   restyle();
 }
 
+// Opens a stream's card. zoomTo also fits the map to it, with its lines past the border.
 function select(id, zoomTo) {
   if (!showDry && !flows(info[id].f)) setShowDry(true);
   selected = id;
@@ -529,12 +583,16 @@ function clearSelection() {
   history.replaceState(null, "", location.pathname + location.search);
 }
 
+// The page's address is #slug, of a stream or an aquifer.
 function openFromHash() {
   const slug = decodeURIComponent(location.hash.slice(1));
   if (idBySlug.has(slug)) select(idBySlug.get(slug), true);
   else if (aquiferBySlug.has(slug)) selectAquifer(aquiferBySlug.get(slug));
 }
 
+// ---- Search ----
+
+// Compare without niqqud, a leading "stream of" or the definite article.
 function normalize(text) {
   return text.replace(/[֑-ׇ]/g, "").replace(/^(נחל|נהר|ואדי|וואדי)\s+/, "").replace(/^ה/, "");
 }
@@ -554,7 +612,7 @@ function renderSearch() {
   // Wait for a pause, so a word counts once and not once per keystroke.
   searchTimer = setTimeout(() => track("search", { search_term: query.slice(0, 40), result_count: matches.length }), 1500);
   if (!matches.length) {
-    results.append(el("li", { class: "note", style: "padding:.4rem .5rem" }, "לא נמצאו נחלים"));
+    results.append(el("li", { class: "note" }, "לא נמצאו נחלים"));
     return;
   }
   for (const [id, entry] of matches) {
@@ -568,6 +626,8 @@ function renderSearch() {
     }, entry.n, el("small", {}, DRAINAGE[entry.d].label))));
   }
 }
+
+// ---- Wiring and loading ----
 
 dryToggle.addEventListener("change", () => {
   setShowDry(dryToggle.checked);

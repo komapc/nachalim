@@ -125,7 +125,6 @@ COAST_RADIUS_M = 2500
 # When a stream's ways end in different places, the lowest final sink wins.
 SINK_RANK = {"dead": 0, "gulf": 0, "yotvata": 0, "med": 0, "kinneret": 1, "hula": 2}
 PARENT_RANK = 3  # a parent stream counts for less than reaching a sink directly
-UNKNOWN_SINK_RANK = 5  # a sink set by a future rule that is missing from SINK_RANK
 DEAD_END_RANK = 6
 
 
@@ -250,7 +249,7 @@ class Network:
 def outlet_rank(option):
     target, sink, _ = option
     if sink:
-        return SINK_RANK.get(sink, UNKNOWN_SINK_RANK)
+        return SINK_RANK[sink]
     return PARENT_RANK if target is not None else DEAD_END_RANK
 
 

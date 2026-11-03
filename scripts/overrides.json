@@ -47,8 +47,8 @@
   {"name": "נחל דבשה", "parent": "נהר הירדן", "via": "dem"},
   {"name": "נהר הזהראני", "sink": "med", "via": "wiki"},
   {"name": "נחל לבן", "sink": "arish", "via": "wiki"},
-  {"name": "נחל לוץ", "sink": "arish", "via": "dem"},
-  {"name": "נחל בתור", "sink": "arish", "via": "dem"},
-  {"name": "נחל קדש ברנע", "sink": "arish", "via": "dem"},
+  {"name": "נחל לוץ", "sink": "arish", "via": "osm"},
+  {"name": "נחל בתור", "sink": "arish", "via": "osm"},
+  {"name": "נחל קדש ברנע", "sink": "arish", "via": "osm"},
   {"name": "ואדי רם", "sink": "gulf", "via": "dem"}
 ]

@@ -239,6 +239,94 @@ function restyle() {
     });
   }
   if (selected !== null) layersById.get(selected).bringToFront();
+  syncNameLabels();
+}
+
+// ---- Stream names ----
+
+// A MapLibre layer of its own, above the stream lines, so that lines cannot cover a name.
+// Longer streams get a name first. MapLibre zoom levels are one below Leaflet's.
+const NAME_TIERS = [
+  { id: "names-short", minKm: 0, minZoom: 11.5 },
+  { id: "names-medium", minKm: 5, minZoom: 10 },
+  { id: "names-long", minKm: 15, minZoom: 8.5 },
+  { id: "names-longest", minKm: 40, minZoom: 6 },
+];
+// Darker than the lines, to read as text, and coloured to differ from the names of places.
+const NAME_PAINT = {
+  "text-color": ["match", ["get", "d"],
+    "med", "#0f5288", "jordan", "#06645c", "dead", "#8a3f17", "gulf", "#62307f", "closed", "#6f5a06", "#4a5356"],
+  "text-halo-color": "#fff",
+  "text-halo-width": 2.5,
+};
+let nameMap = null;
+let namesReady = false;
+
+function nameLayout(size, font) {
+  return {
+    "text-field": ["get", "n"],
+    "text-font": [font],
+    "text-size": size,
+    "text-padding": 6,
+  };
+}
+
+// One point per stream, halfway along its longest line, so that a name stays horizontal.
+function namePoints(geojson) {
+  const features = geojson.features.map(({ properties, geometry }) => {
+    const line = geometry.coordinates.reduce((a, b) => (b.length > a.length ? b : a));
+    return { type: "Feature", properties, geometry: { type: "Point", coordinates: line[Math.floor(line.length / 2)] } };
+  });
+  return { type: "FeatureCollection", features };
+}
+
+function addNameLabels(geojson) {
+  map.createPane("names").style.zIndex = 450;
+  map.getPane("names").style.pointerEvents = "none";
+  const labels = L.maplibreGL({
+    pane: "names",
+    attributionControl: false,
+    style: {
+      version: 8,
+      glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+      sources: { streams: { type: "geojson", data: namePoints(geojson) } },
+      layers: [
+        ...NAME_TIERS.map(({ id, minZoom }) => ({
+          id, type: "symbol", source: "streams", minzoom: minZoom,
+          layout: nameLayout(13, "Noto Sans Regular"), paint: NAME_PAINT,
+        })),
+        {
+          id: "names-selected", type: "symbol", source: "streams", filter: ["==", ["get", "i"], -1],
+          layout: { ...nameLayout(15, "Noto Sans Bold"), "text-allow-overlap": true }, paint: NAME_PAINT,
+        },
+      ],
+    },
+  }).addTo(map);
+  nameMap = labels.getMaplibreMap();
+  nameMap.on("load", () => {
+    namesReady = true;
+    syncNameLabels();
+  });
+}
+
+// Names follow what stands out on the map: a dimmed stream has none.
+function namedStreams() {
+  return Object.entries(info).filter(([, entry]) => {
+    if (!showDry && !flows(entry.f)) return false;
+    if (filter && entry.d !== filter) return false;
+    if (aquifer) return aquifer.rivers.includes(entry.s);
+    if (selected !== null) return entry.r === info[selected].r;
+    return true;
+  }).map(([id]) => Number(id));
+}
+
+function syncNameLabels() {
+  if (!namesReady) return;
+  const named = ["in", ["get", "i"], ["literal", namedStreams()]];
+  for (const { id, minKm } of NAME_TIERS) {
+    nameMap.setFilter(id, ["all", [">=", ["get", "k"], minKm], named]);
+  }
+  nameMap.setFilter("names-selected", ["==", ["get", "i"], selected ?? -1]);
 }
 
 // ---- Panel helpers ----
@@ -704,6 +792,7 @@ Promise.all([
       line.on("click", (event) => clickStream(event, info[feature.properties.i].s, () => select(feature.properties.i, false)));
     },
   }).addTo(map);
+  addNameLabels(geojson);
   const dryCount = Object.values(info).filter((entry) => !flows(entry.f)).length;
   document.getElementById("dry-count").textContent = `(${dryCount.toLocaleString("he-IL")})`;
   renderOverview();

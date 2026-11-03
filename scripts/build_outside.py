@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Continue streams past the data box, through OSM ways and traced outlets.
+"""Continue streams past the data box, along OSM ways.
 
-Usage: build_outside.py RAW_WAYS RAW_OUTSIDE_DIR RIVERS_JSON INFO_JSON TRACES_JSON OUT_GEOJSON
+Usage: build_outside.py RAW_WAYS RAW_OUTSIDE_DIR RIVERS_JSON INFO_JSON JOINS_JSON OUT_GEOJSON
 Writes lines only for streams that really leave the box. Standard library only.
 
-Each feature has s (the stream's slug, or null for Wadi al-Arish itself), n (its name)
-and src ("osm" for a mapped way, "dem" for a line traced on the elevation model).
+Each feature has s (the stream's slug, or null for Wadi al-Arish itself) and n (its name).
 """
 import collections
 import json
@@ -95,13 +94,13 @@ class Network:
         return longest(start)[1]
 
 
-def feature(points, slug, name, source):
+def feature(points, slug, name):
     line = [[round(x, 5), round(y, 5)] for x, y in simplify([tuple(p) for p in points])]
-    return {"type": "Feature", "properties": {"s": slug, "n": name, "src": source},
+    return {"type": "Feature", "properties": {"s": slug, "n": name},
             "geometry": {"type": "LineString", "coordinates": line}}
 
 
-def river_features(river, slug, network, traces):
+def river_features(river, slug, network, joins):
     """The lines that continue one stream, past its mouth and above its head."""
     features = []
     if river["parent"] is None and river["mouth"]:
@@ -110,42 +109,40 @@ def river_features(river, slug, network, traces):
         walks = [network.downstream(tuple(line[-1]), river["id"]) for line in river["lines"]]
         through = [walk for walk in walks if mouth in walk]
         points = max(through, key=length_km) if through else network.downstream(mouth, river["id"])
-        if not through and river["name"] in traces["joins"]:
-            features.append(feature(max(walks, key=length_km), slug, river["name"], "osm"))
-            features.append(feature(traces["joins"][river["name"]], slug, river["name"], "dem"))
+        if not through and river["name"] in joins["joins"]:
+            features.append(feature(max(walks, key=length_km), slug, river["name"]))
+            features.append(feature(joins["joins"][river["name"]], slug, river["name"]))
         # A stream draining to Sinai is drawn from its mouth, even inside the box.
         leaves = river["sink"] == "arish" or not all(in_box(p) for p in points)
         if length_km(points) >= MIN_KM and leaves:
-            features.append(feature(points, slug, river["name"], "osm"))
+            features.append(feature(points, slug, river["name"]))
     heads = {tuple(line[0]) for line in river["lines"]}
     points = max((network.upstream(head) for head in heads), key=length_km, default=[])
     if length_km(points) >= MIN_KM and not all(in_box(p) for p in points):
-        features.append(feature(points, slug, river["name"], "osm"))
-    if river["parent"] is None and river["name"] in traces["streams"]:
-        features.append(feature(traces["streams"][river["name"]], slug, river["name"], "dem"))
+        features.append(feature(points, slug, river["name"]))
+    if river["parent"] is None and river["name"] in joins["streams"]:
+        features.append(feature(joins["streams"][river["name"]], slug, river["name"]))
     return features
 
 
 def main():
     sys.setrecursionlimit(5000)  # Network.upstream recurses along the way chain
-    ways_path, outside_dir, rivers_path, info_path, traces_path, out_path = sys.argv[1:7]
+    ways_path, outside_dir, rivers_path, info_path, joins_path, out_path = sys.argv[1:7]
     rivers = read_json(rivers_path)
     info = read_json(info_path)
-    traces = read_json(traces_path)
+    joins = read_json(joins_path)
     ways = load_ways(ways_path, outside_dir)
     network = Network(ways, owners(ways, rivers))
     features = []
     for river in rivers:
-        features += river_features(river, info[str(river["id"])]["s"], network, traces)
+        features += river_features(river, info[str(river["id"])]["s"], network, joins)
     for way in ways.values():
         if "Arish" in way["tags"].get("name:en", ""):
-            features.append(feature(way["pts"], None, ARISH, "osm"))
-    for gap in traces["arish_gaps"]:
-        features.append(feature(gap, None, ARISH, "dem"))
+            features.append(feature(way["pts"], None, ARISH))
     write_json(out_path, {"type": "FeatureCollection", "features": features})
     summary = collections.Counter()
     for f in features:
-        summary[f["properties"]["n"], f["properties"]["src"]] += round(length_km(f["geometry"]["coordinates"]))
+        summary[f["properties"]["n"]] += round(length_km(f["geometry"]["coordinates"]))
     print(summary.most_common())
 
 

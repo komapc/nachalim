@@ -31,6 +31,7 @@ const SINK_NAMES = {
 const OUTLET_SOURCES = {
   wiki: "המוצא לפי ויקיפדיה, כי קו הנחל במפה נקטע.",
   dem: "קו הנחל במפה נקטע, והמוצא הוסק מגובה השטח (מודל הגובה Copernicus).",
+  osm: "קו הנחל במפה נקטע, והמוצא נקבע לפי המשך הוואדיות במפה הפתוחה (OpenStreetMap).",
 };
 
 const FLOW_LABELS = {
@@ -203,7 +204,7 @@ function styleFor(feature) {
 
 // Lines past the data edge follow their stream's state, and are thinner.
 function outsideStyle(feature) {
-  const { s, src } = feature.properties;
+  const { s } = feature.properties;
   const entry = s ? info[idBySlug.get(s)] : null;
   const dry = entry ? !flows(entry.f) : true;
   const drainage = entry ? entry.d : "med";
@@ -223,7 +224,7 @@ function outsideStyle(feature) {
       opacity = Math.min(opacity, OPACITY_DIMMED);
     }
   }
-  return { color: DRAINAGE[drainage].color, weight, opacity, dashArray: src === "dem" ? "2 6" : null, lineCap: "round" };
+  return { color: DRAINAGE[drainage].color, weight, opacity, lineCap: "round" };
 }
 
 // Brings the map in line with the state. Call it after any change to the state.
@@ -334,10 +335,7 @@ function renderOverview() {
   const addLine = (kind, text) => lineKey.append(el("li", {}, el("span", { class: `line-sample line-${kind}` }), el("span", {}, text)));
   addLine("solid", "קו רצוף: נחל איתן או נחל שזורם בחלקו.");
   if (showDry) addLine("dashed", "קו מקווקו: נחל אכזב או נחל ללא מידע על זרימה. מופיע רק בהגדלה של המפה; במבט רחוק גם הוא רצוף.");
-  if (outsideLayer) {
-    addLine("thin", "קו דק: המשך הנחל מחוץ לתחום המפה.");
-    addLine("dotted", "קו מנוקד: מסלול מחוץ לתחום המפה שהוסק מגובה השטח, כי אין לו קו במפה הפתוחה. יש כאלה רק בסיני ובדרום ירדן, וכדי לראותם צריך להזיז את המפה.");
-  }
+  if (outsideLayer) addLine("thin", "קו דק: המשך הנחל מחוץ לתחום המפה.");
   details.append(lineKey);
   if (aquifers.length) {
     details.append(el("h3", {}, "מי תהום: אקוויפרים"));

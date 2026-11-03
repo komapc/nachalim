@@ -27,14 +27,14 @@ The site has no build step: `site/` is served as it is, and GitHub Pages deploys
 scripts/fetch_osm.sh
 python3 scripts/build_rivers.py raw/ways.json raw/sinks.json raw/out
 python3 scripts/enrich_wiki.py raw/out/rivers.json raw/wiki_cache.json site/data
-python3 scripts/build_outside.py raw/ways.json raw/outside raw/out/rivers.json site/data/info.json scripts/outlet_traces.json site/data/outside.geojson
+python3 scripts/build_outside.py raw/ways.json raw/outside raw/out/rivers.json site/data/info.json scripts/outlet_joins.json site/data/outside.geojson
 ```
 
 With unchanged downloads and Wikipedia cache the output is byte-identical, so after a code change `git diff site/data` shows exactly what the change did.
 
 - `build_rivers.py` groups named OpenStreetMap waterways into streams, follows the flow downstream to find each stream's parent, and classifies the outlet. Corrections go in `scripts/overrides.json`. It also writes `skipped.json`, the way names it rejected.
 - `enrich_wiki.py` adds Hebrew Wikipedia summaries and writes `rivers.geojson` and `info.json`. Arabic text is removed from the summaries.
-- `build_outside.py` continues streams past the download box, as thin lines. They follow OpenStreetMap ways where those connect, and otherwise `scripts/outlet_traces.json`, which `trace_outlets.py` traced downhill on the elevation model and which is committed so a rebuild does not need that data. The zoom-out limit still fits Israel; only panning reaches these lines.
+- `build_outside.py` continues streams past the download box, as thin lines. They follow OpenStreetMap ways only. Where the ways do not join end to end, `scripts/outlet_joins.json` holds the path along them, which `join_outlets.py` finds and which is committed. A line stops where the ways stop: Nahal Lavan about 4 km short of Wadi al-Arish, Wadi al-Arish about 350 m short of the sea, and Wadi Rum at the end of its mapped stretch. The zoom-out limit still fits Israel; only panning reaches these lines.
 
 Each rule in `overrides.json` names a stream and can set `sink`, `parent`, `flow` and `via`.
 
@@ -42,7 +42,7 @@ Each rule in `overrides.json` names a stream and can set `sink`, `parent`, `flow
 
 Flow type comes from `overrides.json`, then the opening of the Hebrew Wikipedia article, then OpenStreetMap tags, whose `intermittent` tag is often wrong.
 
-A basin here is the set of streams that reach the same top-level stream. Where an OpenStreetMap line stops short of its outlet, `overrides.json` records the outlet with `via`: `wiki` means Hebrew Wikipedia says so, and `dem` means it was traced downhill on the Copernicus GLO-30 elevation model. Those rules apply only to a stream that is still untraced, not to namesakes. A stream whose outlet could not be established would be shown grey and explained in the legend, rather than guessed; at present there are none.
+A basin here is the set of streams that reach the same top-level stream. Where an OpenStreetMap line stops short of its outlet, `overrides.json` records the outlet with `via`: `wiki` means Hebrew Wikipedia says so, `dem` means it was traced downhill on the Copernicus GLO-30 elevation model, and `osm` means OpenStreetMap ways lead there past the download box. No traced line is drawn on the map. Those rules apply only to a stream that is still untraced, not to namesakes. A stream whose outlet could not be established would be shown grey and explained in the legend, rather than guessed; at present there are none.
 
 Twelve streams of the southern Arava end in the Yotvata salt flat, shown as a closed basin rather than the Gulf of Eilat. On Copernicus GLO-30 at full 30 m the depression covers about 97 km², with a floor at 48 m and the lowest rim at 77 m, and Hebrew Wikipedia describes the flat as a closed depression. The Evrona flat further south shows no such rim, which fits published work that it is now open, so its streams stay in the Gulf group.
 
@@ -62,10 +62,10 @@ Twelve streams of the southern Arava end in the Yotvata salt flat, shown as a cl
 | `k` | Length in km |
 | `sink` | Where its basin ends: `med`, `gulf`, `dead`, `kinneret`, `hula`, `arish`, `yotvata`, or `null` |
 | `f` | Flow: `perennial`, `mixed`, `intermittent`, or absent if unknown |
-| `v` | How the outlet was established when the line stops short: `wiki` or `dem` |
+| `v` | How the outlet was established when the line stops short: `wiki`, `dem` or `osm` |
 | `w`, `x` | Wikipedia page title and summary |
 
-`rivers.geojson` holds the geometry, with properties `i` (the id), `d`, `k`, `n` and `f`. `outside.geojson` holds the lines past the box, with `s`, `n` and `src` (`osm`, or `dem` for a traced line, drawn dotted).
+`rivers.geojson` holds the geometry, with properties `i` (the id), `d`, `k`, `n` and `f`. `outside.geojson` holds the lines past the box, with `s` and `n`.
 
 `aquifers.json` is written by hand and the rebuild scripts do not touch it. Each aquifer has `id`, `name`, `color`, `ring` (the polygon, as `[lng, lat]`), `label` (where its name goes on the map), `rock`, `note`, `rivers` (slugs of linked streams) and `empty` (the text shown when `rivers` is empty), and optionally `recharge`, `production` and `discharge`.
 

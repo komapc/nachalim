@@ -59,8 +59,10 @@ const OPACITY_QUIET = 0.3;
 
 const map = L.map("map", {
   preferCanvas: true,
+  zoomControl: false,
   zoomSnap: 0.25,
-  maxZoom: 15,
+  wheelPxPerZoomLevel: 120, // the default moves more than a whole level per notch of a mouse wheel
+  maxZoom: 18,
   maxBounds: ISRAEL.pad(0.04),
   maxBoundsViscosity: 1,
   renderer: L.canvas({ tolerance: 7 }),
@@ -77,6 +79,29 @@ function fitIsrael() {
 map.fitBounds(ISRAEL, { animate: false });
 map.setMinZoom(map.getBoundsZoom(ISRAEL));
 map.on("resize", fitIsrael);
+
+L.control.zoom({ zoomInTitle: "הגדלה", zoomOutTitle: "הקטנה" }).addTo(map);
+
+// Back to the whole country. It leaves an open card open.
+const HomeControl = L.Control.extend({
+  options: { position: "topleft" },
+  onAdd() {
+    const bar = L.DomUtil.create("div", "leaflet-bar");
+    const button = L.DomUtil.create("a", "home-control", bar);
+    button.href = "#";
+    button.role = "button";
+    button.title = "הצגת כל הארץ";
+    button.setAttribute("aria-label", button.title);
+    button.textContent = "⌂";
+    L.DomEvent.disableClickPropagation(bar);
+    L.DomEvent.on(button, "click", (event) => {
+      L.DomEvent.preventDefault(event);
+      map.fitBounds(ISRAEL);
+    });
+    return bar;
+  },
+});
+new HomeControl().addTo(map);
 
 // A diagram under the streams. Their canvas covers this pane and would catch any click
 // first, so the polygons are not interactive and clickMap tests the point against them.

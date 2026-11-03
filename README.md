@@ -1,6 +1,6 @@
 # Nachalim
 
-Interactive map of the streams and rivers (נחלים) of Israel, in Hebrew. Click a stream to see its basin, where it flows, its tributaries and a Wikipedia summary.
+Interactive map of the streams and rivers (נחלים) of Israel, in Hebrew, at <https://nachalim.lipu.dev/>. Click a stream to see its basin, where it flows, its tributaries and a Wikipedia summary. Groundwater aquifers can be shown under the streams.
 
 ## Run locally
 
@@ -8,27 +8,80 @@ Interactive map of the streams and rivers (נחלים) of Israel, in Hebrew. Cli
 python3 -m http.server 8000 -d site
 ```
 
+The site has no build step: `site/` is served as it is, and GitHub Pages deploys it on every push to `main` (`.github/workflows/pages.yml`).
+
+## Layout
+
+| Path | What it is |
+| --- | --- |
+| `site/app.js` | All of the interface: map, panel, search, links |
+| `site/consent.js` | Consent banner. Google Analytics loads only after "allow"; the Measurement ID is `data-ga` in `index.html` |
+| `site/data/` | The data the page loads, see below |
+| `site/vendor/` | Leaflet and MapLibre, kept in the repository |
+| `scripts/` | The data pipeline, and `make_og.py` and `make_icons.py`, which render the link preview and the favicons and need Playwright |
+| `raw/` | Downloads and intermediate files, git-ignored |
+
 ## Rebuild the data
 
 ```sh
 scripts/fetch_osm.sh
 python3 scripts/build_rivers.py raw/ways.json raw/sinks.json raw/out
-PYTHONPATH=scripts python3 scripts/enrich_wiki.py raw/out/rivers.json raw/wiki_cache.json site/data
-PYTHONPATH=scripts python3 scripts/build_outside.py raw/ways.json raw/outside raw/out/rivers.json site/data/info.json scripts/outlet_traces.json site/data/outside.geojson
+python3 scripts/enrich_wiki.py raw/out/rivers.json raw/wiki_cache.json site/data
+python3 scripts/build_outside.py raw/ways.json raw/outside raw/out/rivers.json site/data/info.json scripts/outlet_traces.json site/data/outside.geojson
 ```
 
-- `build_rivers.py` groups named OpenStreetMap waterways into streams, follows the flow downstream to find each stream's parent, and classifies the outlet. Corrections go in `scripts/overrides.json`.
-- `enrich_wiki.py` adds Hebrew Wikipedia summaries and writes `site/data/`.
+With unchanged downloads and Wikipedia cache the output is byte-identical, so after a code change `git diff site/data` shows exactly what the change did.
 
-Flow type comes from `overrides.json`, then the opening of the Hebrew Wikipedia article, then OpenStreetMap tags, whose `intermittent` tag is often wrong. Arabic text is removed from the summaries, and base-map labels are limited to Hebrew names.
+- `build_rivers.py` groups named OpenStreetMap waterways into streams, follows the flow downstream to find each stream's parent, and classifies the outlet. Corrections go in `scripts/overrides.json`. It also writes `skipped.json`, the way names it rejected.
+- `enrich_wiki.py` adds Hebrew Wikipedia summaries and writes `rivers.geojson` and `info.json`. Arabic text is removed from the summaries.
+- `build_outside.py` continues streams past the download box, as thin lines. They follow OpenStreetMap ways where those connect, and otherwise `scripts/outlet_traces.json`, which `trace_outlets.py` traced downhill on the elevation model and which is committed so a rebuild does not need that data. The zoom-out limit still fits Israel; only panning reaches these lines.
 
-`build_outside.py` continues streams past the download box, as thin lines. They follow OpenStreetMap ways where those connect, and otherwise `scripts/outlet_traces.json`, which `trace_outlets.py` traced downhill on the elevation model and which is committed so a rebuild does not need that data. The zoom-out limit still fits Israel; only panning reaches these lines.
+Each rule in `overrides.json` names a stream and can set `sink`, `parent`, `flow` and `via`.
 
-A basin here is the set of streams that reach the same top-level stream. Where an OpenStreetMap line stops short of its outlet, `overrides.json` records the outlet with `via`: `wiki` means Hebrew Wikipedia says so, and `dem` means it was traced downhill on the Copernicus GLO-30 elevation model. Those rules apply only to a stream that is still untraced, not to namesakes. A stream whose outlet could not be established stays grey and is explained in the legend, rather than guessed.
+## Data decisions
+
+Flow type comes from `overrides.json`, then the opening of the Hebrew Wikipedia article, then OpenStreetMap tags, whose `intermittent` tag is often wrong.
+
+A basin here is the set of streams that reach the same top-level stream. Where an OpenStreetMap line stops short of its outlet, `overrides.json` records the outlet with `via`: `wiki` means Hebrew Wikipedia says so, and `dem` means it was traced downhill on the Copernicus GLO-30 elevation model. Those rules apply only to a stream that is still untraced, not to namesakes. A stream whose outlet could not be established would be shown grey and explained in the legend, rather than guessed; at present there are none.
+
+Twelve streams of the southern Arava end in the Yotvata salt flat, shown as a closed basin rather than the Gulf of Eilat. On Copernicus GLO-30 at full 30 m the depression covers about 97 km², with a floor at 48 m and the lowest rim at 77 m, and Hebrew Wikipedia describes the flat as a closed depression. The Evrona flat further south shows no such rim, which fits published work that it is now open, so its streams stay in the Gulf group.
+
+## Data files
+
+`info.json` maps a stream's id to a record with short keys, which keep the file small:
+
+| Key | Meaning |
+| --- | --- |
+| `s` | Slug, used in the page address |
+| `n` | Hebrew name |
+| `en` | English name, if known |
+| `d` | Drainage, which sets the colour: `med`, `jordan`, `dead`, `gulf`, `closed`, `unknown` |
+| `r` | Id of the top-level stream of its basin |
+| `p` | Id of the parent stream, `null` for a top-level stream |
+| `c` | Ids of its tributaries, longest first |
+| `k` | Length in km |
+| `sink` | Where its basin ends: `med`, `gulf`, `dead`, `kinneret`, `hula`, `arish`, `yotvata`, or `null` |
+| `f` | Flow: `perennial`, `mixed`, `intermittent`, or absent if unknown |
+| `v` | How the outlet was established when the line stops short: `wiki` or `dem` |
+| `w`, `x` | Wikipedia page title and summary |
+
+`rivers.geojson` holds the geometry, with properties `i` (the id), `d`, `k`, `n` and `f`. `outside.geojson` holds the lines past the box, with `s`, `n` and `src` (`osm`, or `dem` for a traced line, drawn dotted).
+
+`aquifers.json` is written by hand and the rebuild scripts do not touch it. Each aquifer has `id`, `name`, `color`, `ring` (the polygon, as `[lng, lat]`), `label` (where its name goes on the map), `rock`, `note`, `rivers` (slugs of linked streams) and `empty` (the text shown when `rivers` is empty), and optionally `recharge`, `production` and `discharge`.
 
 ## Aquifers
 
-`site/data/aquifers.json` is written by hand and the rebuild scripts do not touch it. The polygons are schematic: they follow the wording of the [basin descriptions](https://www.jewishvirtuallibrary.org/groundwater-basins-in-israel) credited to the Geological Survey of Israel, and were not traced from any published map. A stream is linked to an aquifer only where that source, its Wikipedia summary or a named OpenStreetMap spring supports the link, so the lists are partial.
+The polygons are schematic: they follow the wording of the [basin descriptions](https://www.jewishvirtuallibrary.org/groundwater-basins-in-israel) credited to the Geological Survey of Israel, and were not traced from any published map. A stream is linked to an aquifer only where that source, its Wikipedia summary or a named OpenStreetMap spring supports the link, so the lists are partial.
+
+The streams are drawn on a canvas that lies over the aquifers and would catch every click, so the polygons take no clicks at all and `clickMap` in `app.js` tests the point against their rings instead. While an aquifer is open or "show all aquifers" is on:
+
+- a click on an aquifer opens it, and in an overlap each further click moves to the next one there, smallest first;
+- a click outside all of them closes the card;
+- dimmed streams pass their clicks on to the aquifer below (`clickStream`), and only the streams of the open aquifer can be opened from the map.
+
+## Testing
+
+There is no test suite. Try changes in a browser, and for clicks on the map use real mouse events: `map.fire("click")` skips the streams lying on top and has hidden a bug that way.
 
 ## Licences
 
@@ -36,5 +89,3 @@ A basin here is the set of streams that reach the same top-level stream. Where a
 - Summaries in `site/data/info.json`: Hebrew Wikipedia, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 - Elevation used to trace outlets (not redistributed): Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA.
 - Base map: [OpenFreeMap](https://openfreemap.org), © OpenMapTiles, © OpenStreetMap. Leaflet: BSD-2-Clause. MapLibre GL JS: BSD-3-Clause.
-
-Twelve streams of the southern Arava end in the Yotvata salt flat, shown as a closed basin rather than the Gulf of Eilat. On Copernicus GLO-30 at full 30 m the depression covers about 97 km², with a floor at 48 m and the lowest rim at 77 m, and Hebrew Wikipedia describes the flat as a closed depression. The Evrona flat further south shows no such rim, which fits published work that it is now open, so its streams stay in the Gulf group.

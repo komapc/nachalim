@@ -81,7 +81,14 @@ The streams are drawn on a canvas that lies over the aquifers and would catch ev
 
 ## Testing
 
-There is no test suite. Try changes in a browser, and for clicks on the map use real mouse events: `map.fire("click")` skips the streams lying on top and has hidden a bug that way.
+```sh
+pip install playwright==1.61.0 && playwright install chromium
+python3 -m unittest discover tests
+```
+
+`tests/test_map_clicks.py` covers clicks on the map, and runs on every pull request. It serves `site/` itself and needs no network. Add new map tests with real mouse events: `map.fire("click")` skips the streams lying on top and has hidden a bug that way.
+
+After a change to the pipeline, rebuild and read `git diff site/data`.
 
 ## Licences
 

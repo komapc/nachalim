@@ -17,7 +17,8 @@ from playwright.sync_api import sync_playwright
 SITE = pathlib.Path(__file__).resolve().parent.parent / "site"
 BROWSER_ARGS = ["--use-gl=swiftshader", "--enable-webgl", "--ignore-gpu-blocklist", "--enable-unsafe-swiftshader"]
 EMPTY_STYLE = json.dumps({"version": 8, "sources": {}, "layers": []})
-OVERLAP = (32.0, 34.8)  # in both the coastal and the Yarkon-Taninim aquifers
+COASTAL = (32.0, 34.8)
+YARKON_TANINIM = (32.0, 35.1)
 SEA = (32.5, 33.9)  # outside all aquifers
 STREAM_ZOOM = 13  # close enough that a click hits one stream, not a neighbour
 
@@ -104,8 +105,8 @@ class MapClicks(unittest.TestCase):
           for (const id of ids) {
             if (open.rivers.includes(info[id].s)) continue;
             const [lat, lng] = middleOf(id);
-            const here = aquifersAt({ lat, lng });
-            if (here.length === 1 && here[0] !== open) return { id, point: [lat, lng], aquifer: here[0].id };
+            const here = aquiferAt({ lat, lng });
+            if (here && here !== open) return { id, point: [lat, lng], aquifer: here.id };
           }
           return null;
         }""", open_slug)
@@ -141,13 +142,13 @@ class MapClicks(unittest.TestCase):
         self.assertEqual(self.open_card()[0], None)
         self.assertIsNotNone(self.open_card()[1])
 
-    def test_clicks_in_overlap_cycle_through_aquifers(self):
+    def test_click_opens_the_aquifer_there(self):
         self.open_aquifer("carmel")
         seen = []
-        for _ in range(3):
-            self.click_at(*OVERLAP)
+        for point in (COASTAL, COASTAL, YARKON_TANINIM):
+            self.click_at(*point)
             seen.append(self.open_card()[0])
-        self.assertEqual(seen, ["coastal", "yarkon-taninim", "coastal"])
+        self.assertEqual(seen, ["coastal", "coastal", "yarkon-taninim"])
 
     def test_click_outside_aquifers_closes_card(self):
         self.open_aquifer("carmel")
@@ -164,7 +165,7 @@ class MapClicks(unittest.TestCase):
 
     def test_show_all_aquifers_stays_on_after_closing_card(self):
         self.page.check("#all-aquifers")
-        self.click_at(*OVERLAP)
+        self.click_at(*COASTAL)
         self.assertIsNotNone(self.open_card()[0])
         self.click_at(*SEA)
         self.assertEqual(self.open_card(), (None, None))

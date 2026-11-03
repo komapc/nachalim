@@ -71,11 +71,11 @@ Twelve streams of the southern Arava end in the Yotvata salt flat, shown as a cl
 
 ## Aquifers
 
-The polygons are schematic: they follow the wording of the [basin descriptions](https://www.jewishvirtuallibrary.org/groundwater-basins-in-israel) credited to the Geological Survey of Israel, and were not traced from any published map. A stream is linked to an aquifer only where that source, its Wikipedia summary or a named OpenStreetMap spring supports the link, so the lists are partial.
+The polygons are schematic. They follow the wording of the [basin descriptions](https://www.jewishvirtuallibrary.org/groundwater-basins-in-israel) credited to the Geological Survey of Israel, and their boundaries were adjusted by eye to the basin map in the lecture "מבוא להידרולוגיה ולמשק המים הישראלי" (course on stream restoration, slide 22). So the basins tile the country without gaps or overlaps, as on that map: the coastal and Yarkon-Taninim basins lie side by side, Yarkon-Taninim reaches into the Negev, and the Gaza Strip is left blank. They were not digitised from that map. A stream is linked to an aquifer only where one of these sources, its Wikipedia summary or a named OpenStreetMap spring supports the link, so the lists are partial.
 
 The streams are drawn on a canvas that lies over the aquifers and would catch every click, so the polygons take no clicks at all and `clickMap` in `app.js` tests the point against their rings instead. While an aquifer is open or "show all aquifers" is on:
 
-- a click on an aquifer opens it, and in an overlap each further click moves to the next one there, smallest first;
+- a click on an aquifer opens it;
 - a click outside all of them closes the card;
 - dimmed streams pass their clicks on to the aquifer below (`clickStream`), and only the streams of the open aquifer can be opened from the map.
 

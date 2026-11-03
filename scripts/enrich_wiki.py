@@ -4,7 +4,10 @@
 Usage: enrich_wiki.py RIVERS_JSON CACHE_JSON OUT_DIR
 Links come from the OSM wikidata/wikipedia tags. A river without a tag is matched
 on its exact page title only if its name is unique, the page is not a
-disambiguation page, and any page coordinates lie near the river.
+disambiguation page, and its page coordinates lie near the river.
+
+Writes OUT_DIR/rivers.geojson and OUT_DIR/info.json (keys explained in the README).
+Network replies are kept in CACHE_JSON: delete it to fetch fresh summaries.
 """
 import collections
 import json
@@ -15,6 +18,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+from build_rivers import dist_m, read_json, write_json
 
 UA = "nachalim-build (github.com/komapc/nachalim)"
 SUMMARY_CHARS = 700
@@ -87,7 +92,6 @@ def pages(titles):
 
 
 def near(coord, lines):
-    from build_rivers import dist_m
     return any(dist_m(coord, p) <= MAX_MATCH_KM * 1000 for line in lines for p in line)
 
 
@@ -139,12 +143,8 @@ def drainage(river, rivers):
     return root["sink"] or "unknown"
 
 
-def main():
-    rivers_path, cache_path, out_dir = sys.argv[1:4]
-    rivers = json.load(open(rivers_path, encoding="utf-8"))
-    cache_file = pathlib.Path(cache_path)
-    cache = json.loads(cache_file.read_text(encoding="utf-8")) if cache_file.exists() else {}
-
+def fetch_pages(rivers, cache):
+    """Set each river's _title and _tagged, and fill the cache with what they need."""
     name_count = collections.Counter(r["name"] for r in rivers)
     qids = sorted({r["tags"]["wikidata"] for r in rivers if "wikidata" in r["tags"]})
     missing = [q for q in qids if q not in cache.setdefault("qid", {})]
@@ -166,40 +166,67 @@ def main():
     missing = [t for t in wanted if t not in cache.setdefault("page", {})]
     cache["page"].update({t: None for t in missing})
     cache["page"].update(pages(missing))
-    cache_file.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
 
+
+def assign_slugs(rivers):
+    """URL keys: the name, with a number from the second stream of that name on."""
     slugs = collections.Counter()
-    features, info = [], {}
-    children = collections.defaultdict(list)
-    for river in rivers:
-        if river["parent"] is not None:
-            children[river["parent"]].append(river["id"])
     for river in rivers:
         slugs[river["name"]] += 1
         base = river["name"].replace(" ", "-")
         river["slug"] = base if slugs[river["name"]] == 1 else f"{base}-{slugs[river['name']]}"
 
+
+def usable_page(river, cache):
+    """The river's Wikipedia page, if it has a summary and is really about this river."""
+    page = cache["page"].get(river["_title"]) if river["_title"] else None
+    if not page or not page.get("extract") or page.get("disambiguation"):
+        return None
+    if not river["_tagged"] and not (page.get("coord") and near(page["coord"], river["lines"])):
+        return None
+    return page
+
+
+def info_entry(river, rivers, children, page):
+    """One record of info.json; the short keys keep the file small."""
+    entry = {"s": river["slug"], "n": river["name"], "d": drainage(river, rivers),
+             "r": river["root"], "p": river["parent"], "k": river["km"], "sink": rivers[river["root"]]["sink"],
+             "c": sorted(children[river["id"]], key=lambda i: -rivers[i]["km"])}
+    if river["via"]:
+        entry["v"] = river["via"]
+    if river["tags"].get("name:en"):
+        entry["en"] = river["tags"]["name:en"]
+    flow = river["flow"] or (wiki_flow(page["extract"]) if page else None) or osm_flow(river)
+    if flow:
+        entry["f"] = flow
+    if page:
+        entry["w"] = page["title"]
+        entry["x"] = trim(page["extract"])
+    return entry
+
+
+def main():
+    if len(sys.argv) != 4:
+        sys.exit(__doc__)
+    rivers_path, cache_path, out_dir = sys.argv[1:4]
+    rivers = read_json(rivers_path)
+    cache_file = pathlib.Path(cache_path)
+    cache = json.loads(cache_file.read_text(encoding="utf-8")) if cache_file.exists() else {}
+    fetch_pages(rivers, cache)
+    cache_file.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+    assign_slugs(rivers)
+
+    children = collections.defaultdict(list)
+    for river in rivers:
+        if river["parent"] is not None:
+            children[river["parent"]].append(river["id"])
+
+    features, info = [], {}
     linked = 0
     for river in rivers:
-        page = cache["page"].get(river["_title"]) if river["_title"] else None
-        usable = page and page.get("extract") and not page.get("disambiguation")
-        if usable and not river["_tagged"]:
-            coord = page.get("coord")
-            usable = bool(coord) and near(coord, river["lines"])
-        entry = {"s": river["slug"], "n": river["name"], "d": drainage(river, rivers),
-                 "r": river["root"], "p": river["parent"], "k": river["km"], "sink": rivers[river["root"]]["sink"],
-                 "c": sorted(children[river["id"]], key=lambda i: -rivers[i]["km"])}
-        if river["via"]:
-            entry["v"] = river["via"]
-        if river["tags"].get("name:en"):
-            entry["en"] = river["tags"]["name:en"]
-        flow = river["flow"] or (wiki_flow(page["extract"]) if usable else None) or osm_flow(river)
-        if flow:
-            entry["f"] = flow
-        if usable:
-            linked += 1
-            entry["w"] = page["title"]
-            entry["x"] = trim(page["extract"])
+        page = usable_page(river, cache)
+        linked += bool(page)
+        entry = info_entry(river, rivers, children, page)
         info[river["id"]] = entry
         features.append({"type": "Feature", "id": river["id"],
                          "properties": {"i": river["id"], "d": entry["d"], "k": river["km"], "n": river["name"], "f": entry.get("f", "")},
@@ -207,9 +234,8 @@ def main():
 
     out = pathlib.Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "rivers.geojson").write_text(json.dumps({"type": "FeatureCollection", "features": features},
-                                                   ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    (out / "info.json").write_text(json.dumps(info, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    write_json(out / "rivers.geojson", {"type": "FeatureCollection", "features": features})
+    write_json(out / "info.json", info)
     print(f"{len(rivers)} rivers, {linked} with Wikipedia summaries")
     print(collections.Counter(e["d"] for e in info.values()))
 

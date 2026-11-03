@@ -113,17 +113,21 @@ a { color: var(--accent); }
   border: 0;
 }
 
+/* Plain buttons, without the browser's look. */
+#results button, .legend button, .chips button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+}
+
 #results button {
   display: flex;
   justify-content: space-between;
   gap: .75rem;
   width: 100%;
   padding: .4rem .5rem;
-  font: inherit;
-  color: inherit;
   text-align: start;
-  cursor: pointer;
-  background: none;
   border: 0;
   border-radius: 6px;
 }
@@ -131,6 +135,8 @@ a { color: var(--accent); }
 #results button:hover, #results button:focus-visible { background: var(--hover); }
 
 #results small { color: var(--muted); white-space: nowrap; }
+
+#results .note { padding: .4rem .5rem; }
 
 #details { flex: 1; padding: 1rem; overflow-y: auto; }
 
@@ -151,11 +157,7 @@ a { color: var(--accent); }
   gap: .6rem;
   width: 100%;
   padding: .4rem .5rem;
-  font: inherit;
-  color: inherit;
   text-align: start;
-  cursor: pointer;
-  background: none;
   border: 0;
   border-radius: 6px;
 }
@@ -199,12 +201,8 @@ a { color: var(--accent); }
 
 .chips button {
   padding: .2rem .6rem;
-  font: inherit;
   font-size: .85rem;
-  color: inherit;
   white-space: nowrap;
-  cursor: pointer;
-  background: none;
   border: 1px solid var(--line);
   border-radius: 999px;
 }
@@ -217,7 +215,7 @@ a { color: var(--accent); }
 
 .back { margin-block-end: .7rem; font-size: .9rem; }
 
-.en { margin: .1rem 0 0; color: var(--muted); font-size: .9rem; }
+.en { margin: .1rem 0 0; color: var(--muted); font-size: .9rem; text-align: right; }
 
 .basin-tag {
   display: inline-flex;

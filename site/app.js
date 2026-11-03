@@ -32,7 +32,6 @@ const FLOW_LABELS = {
   intermittent: "נחל אכזב: זורם בעיקר בחורף",
 };
 
-const AQUIFER_COLOR = "#5b4fc7";
 const AQUIFER_SOURCE = "https://www.jewishvirtuallibrary.org/groundwater-basins-in-israel";
 
 const details = document.getElementById("details");
@@ -102,6 +101,8 @@ let showDry = true;
 let aquifers = [];
 let aquifer = null;
 let aquiferShape = null;
+let showAllAquifers = false;
+let allAquifersLayer = null;
 const aquiferBySlug = new Map();
 const layersById = new Map();
 const idBySlug = new Map();
@@ -113,6 +114,11 @@ function weightFor(km, zoom) {
   return base + Math.max(0, zoom - 9) * 0.3;
 }
 
+// With all aquifers shown and nothing selected, they are the subject of the map.
+function riversQuiet() {
+  return showAllAquifers && selected === null && !aquifer;
+}
+
 function styleFor(feature) {
   const { i, d, k, f } = feature.properties;
   const zoom = map.getZoom();
@@ -121,6 +127,7 @@ function styleFor(feature) {
   let opacity = k < 3 && zoom < 9.5 ? 0.35 : 0.85;
   let weight = weightFor(k, zoom);
   if (filter && d !== filter) opacity = 0.08;
+  if (riversQuiet()) opacity = Math.min(opacity, 0.3);
   if (aquifer) {
     if (aquifer.rivers.includes(info[i].s)) {
       opacity = 1;
@@ -155,6 +162,7 @@ function outsideStyle(feature) {
   let weight = 1.6 + Math.max(0, map.getZoom() - 9) * 0.25;
   if (!showDry && dry) opacity = 0;
   if (filter && drainage !== filter) opacity = 0.08;
+  if (riversQuiet()) opacity = Math.min(opacity, 0.3);
   if (aquifer) opacity = Math.min(opacity, 0.15);
   if (selected !== null) {
     const current = info[selected];
@@ -172,6 +180,11 @@ function outsideStyle(feature) {
 function restyle() {
   if (layer) layer.setStyle(styleFor);
   if (outsideLayer) outsideLayer.setStyle(outsideStyle);
+  if (allAquifersLayer) {
+    allAquifersLayer.eachLayer((part) => {
+      if (part.aquifer) part.setStyle(allAquifersStyle(part.aquifer));
+    });
+  }
   if (selected !== null) layersById.get(selected).bringToFront();
 }
 
@@ -251,23 +264,93 @@ function renderOverview() {
   if (outsideLayer) details.append(el("p", { class: "note" }, "קו דק: המשך הנחל מחוץ לתחום המפה. קו מנוקד: מסלול שהוסק מגובה השטח."));
   if (aquifers.length) {
     details.append(el("h3", {}, "מי תהום: אקוויפרים"));
-    details.append(el("p", { class: "note" }, "אקוויפר הוא שכבת סלע נקבובית או סדוקה שמים נעים בתוכה. אקוויפרים יכולים לשכב זה מעל זה, ולכן מוצג אחד בכל פעם. הגבולות סכמטיים."));
+    details.append(el("p", { class: "note" }, "אקוויפר הוא שכבת סלע נקבובית או סדוקה שמים נעים בתוכה. אקוויפרים יכולים לשכב זה מעל זה, ולכן אזורים במפה הכוללת חופפים. הגבולות סכמטיים."));
+    const toggleInput = el("input", { type: "checkbox", id: "all-aquifers" });
+    toggleInput.checked = showAllAquifers;
+    toggleInput.addEventListener("change", () => setShowAllAquifers(toggleInput.checked));
+    details.append(el("label", { class: "toggle" }, toggleInput, el("span", {}, "הצג את כל האקוויפרים על המפה")));
+    if (showAllAquifers) details.append(el("p", { class: "note" }, "לחצו על אזור במפה כדי לפתוח אותו. באזור חופף, לחיצה נוספת עוברת לאקוויפר הבא."));
     const list = el("ul", { class: "legend" });
     for (const entry of aquifers) {
       list.append(el("li", {}, el("button", { type: "button", onclick: () => selectAquifer(entry) },
-        el("span", { class: "swatch swatch-aquifer" }), entry.name)));
+        aquiferSwatch(entry), entry.name)));
     }
     details.append(list);
   }
 }
 
+function aquiferSwatch(entry) {
+  return el("span", { class: "swatch swatch-aquifer", style: `background:${entry.color}40;border-color:${entry.color}` });
+}
+
+function aquiferLatLngs(entry) {
+  return entry.ring.map(([lng, lat]) => [lat, lng]);
+}
+
+function allAquifersStyle(entry) {
+  const quiet = selected !== null || aquifer;
+  return {
+    color: entry.color,
+    weight: 1.5,
+    opacity: quiet ? 0.35 : 0.9,
+    fillOpacity: quiet ? 0.03 : 0.13,
+  };
+}
+
+function setShowAllAquifers(on) {
+  showAllAquifers = on;
+  if (allAquifersLayer) allAquifersLayer.remove();
+  allAquifersLayer = null;
+  if (on) {
+    allAquifersLayer = L.layerGroup(aquifers.map((entry) => {
+      const shape = L.polygon(aquiferLatLngs(entry), { pane: "aquifers", renderer: aquiferRenderer, interactive: false, ...allAquifersStyle(entry) });
+      shape.aquifer = entry;
+      return shape;
+    })).addTo(map);
+    for (const entry of aquifers) {
+      L.tooltip({ permanent: true, direction: "center", className: "aquifer-label", pane: "tooltipPane" })
+        .setLatLng(entry.label ? [entry.label[1], entry.label[0]] : L.polygon(aquiferLatLngs(entry)).getBounds().getCenter())
+        .setContent(entry.name.replace(/^(אגן|אקוויפר)\s+/, ""))
+        .addTo(allAquifersLayer);
+    }
+    track("show_all_aquifers");
+  }
+  if (selected === null && !aquifer) renderOverview();
+  restyle();
+}
+
+function ringArea(ring) {
+  let sum = 0;
+  ring.forEach(([x0, y0], index) => {
+    const [x1, y1] = ring[(index + 1) % ring.length];
+    sum += x0 * y1 - x1 * y0;
+  });
+  return Math.abs(sum) / 2;
+}
+
+function ringContains(ring, lng, lat) {
+  let inside = false;
+  ring.forEach(([x0, y0], index) => {
+    const [x1, y1] = ring[(index + 1) % ring.length];
+    if (y0 > lat !== y1 > lat && lng < x0 + ((lat - y0) / (y1 - y0)) * (x1 - x0)) inside = !inside;
+  });
+  return inside;
+}
+
+// Smallest first, so a small aquifer inside a large one can be reached.
+function aquifersAt(latlng) {
+  return aquifers
+    .filter((entry) => ringContains(entry.ring, latlng.lng, latlng.lat))
+    .sort((a, b) => ringArea(a.ring) - ringArea(b.ring));
+}
+
 function showAquiferShape(entry) {
   if (aquiferShape) aquiferShape.remove();
-  aquiferShape = entry && L.polygon(entry.ring.map(([lng, lat]) => [lat, lng]), {
+  aquiferShape = entry && L.polygon(aquiferLatLngs(entry), {
     pane: "aquifers",
     renderer: aquiferRenderer,
     interactive: false,
-    color: AQUIFER_COLOR,
+    color: entry.color,
     weight: 2,
     dashArray: "6 5",
     fillOpacity: 0.16,
@@ -286,7 +369,7 @@ function renderAquifer(entry) {
   }
   details.append(switcher);
   details.append(el("h2", {}, entry.name));
-  details.append(el("div", { class: "basin-tag" }, el("span", { class: "swatch swatch-aquifer" }), "אקוויפר · גבולות סכמטיים"));
+  details.append(el("div", { class: "basin-tag" }, aquiferSwatch(entry), "אקוויפר · גבולות סכמטיים"));
   const facts = el("dl", { class: "facts" });
   const addFact = (term, value) => facts.append(el("dt", {}, term), el("dd", {}, value));
   addFact("סלע", entry.rock);
@@ -315,7 +398,7 @@ function renderAquifer(entry) {
   switcher.querySelector("[aria-current]").scrollIntoView({ block: "nearest", inline: "center" });
 }
 
-function selectAquifer(entry) {
+function selectAquifer(entry, zoomTo = true) {
   selected = null;
   aquifer = entry;
   filter = null;
@@ -324,7 +407,7 @@ function selectAquifer(entry) {
   track("select_aquifer", { aquifer: entry.id });
   restyle();
   history.replaceState(null, "", `#${entry.id}`);
-  map.fitBounds(aquiferShape.getBounds(), { padding: [30, 30] });
+  if (zoomTo) map.fitBounds(aquiferShape.getBounds(), { padding: [30, 30] });
 }
 
 function renderRiver(id) {
@@ -473,7 +556,15 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest(".search")) results.hidden = true;
 });
 map.on("zoomend", restyle);
-map.on("click", () => {
+map.on("click", (event) => {
+  if (showAllAquifers && selected === null) {
+    const here = aquifersAt(event.latlng);
+    const next = here[here.indexOf(aquifer) + 1];
+    if (next) {
+      selectAquifer(next, false);
+      return;
+    }
+  }
   if (selected !== null || aquifer) clearSelection();
 });
 window.addEventListener("hashchange", openFromHash);

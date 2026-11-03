@@ -168,7 +168,21 @@ a { color: var(--accent); }
 
 .swatch { flex: none; width: 1.1rem; height: .3rem; border-radius: 2px; }
 
-.swatch-aquifer { height: .7rem; background: rgb(91 79 199 / 25%); border: 1px dashed #5b4fc7; }
+.swatch-aquifer { height: .7rem; border: 1px solid; }
+
+/* In an RTL page an absolute element with no left starts from the right edge, shifting tooltips. */
+.leaflet-tooltip { left: 0; }
+
+.aquifer-label {
+  padding: 0 .3rem;
+  font-size: .78rem;
+  font-weight: 600;
+  color: #222;
+  background: rgb(255 255 255 / 80%);
+  border: none;
+  border-radius: 3px;
+  box-shadow: none;
+}
 
 .chips { display: flex; flex-wrap: wrap; gap: .3rem; margin-block-end: .8rem; }
 
@@ -237,6 +251,8 @@ a { color: var(--accent); }
   #panel > header { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .75rem; padding: .6rem 1rem; }
 
   .toggle { flex-basis: 100%; margin-block-start: .35rem; font-size: .8rem; }
+
+  .aquifer-label { padding: 0 .2rem; font-size: .68rem; }
 
   h1 { flex: none; margin: 0; font-size: 1.05rem; }
 

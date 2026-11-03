@@ -171,6 +171,21 @@ class MapClicks(unittest.TestCase):
         self.assertEqual(self.open_card(), (None, None))
         self.assertTrue(self.page.is_checked("#all-aquifers"))
 
+    def test_mouse_wheel_notch_moves_less_than_a_level(self):
+        self.page.evaluate("void map.setView([32, 35], 10, { animate: false })")
+        box = self.page.locator("#map").bounding_box()
+        self.page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        self.page.mouse.wheel(0, -100)
+        self.page.wait_for_function("map.getZoom() > 10")
+        self.assertLess(self.page.evaluate("map.getZoom()"), 11)
+
+    def test_home_button_shows_all_of_israel_and_keeps_card(self):
+        self.open_aquifer("carmel")
+        self.page.evaluate("void map.setView([32, 35], 12, { animate: false })")
+        self.page.locator(".home-control").click()
+        self.page.wait_for_function("map.getZoom() === map.getMinZoom()")
+        self.assertEqual(self.open_card()[0], "carmel")
+
     def test_chips_stay_visible_when_card_scrolls_on_phone(self):
         self.page.context.close()
         self.page = self.open_page(390, 800)

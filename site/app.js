@@ -304,15 +304,24 @@ function renderOverview() {
   }
   details.append(legend);
   if (counts.unknown) details.append(el("p", { class: "note" }, "באפור: נחלים שלא מצאנו לאן הם זורמים."));
-  if (outsideLayer) details.append(el("p", { class: "note" }, "קו דק: המשך הנחל מחוץ לתחום המפה. קו מנוקד: מסלול שהוסק מגובה השטח."));
+  details.append(el("h3", {}, "סוגי הקווים"));
+  const lineKey = el("ul", { class: "line-key" });
+  const addLine = (kind, text) => lineKey.append(el("li", {}, el("span", { class: `line-sample line-${kind}` }), el("span", {}, text)));
+  addLine("solid", "קו רצוף: נחל איתן או נחל שזורם בחלקו.");
+  if (showDry) addLine("dashed", "קו מקווקו: נחל אכזב או נחל ללא מידע על זרימה. מופיע רק בהגדלה של המפה; במבט רחוק גם הוא רצוף.");
+  if (outsideLayer) {
+    addLine("thin", "קו דק: המשך הנחל מחוץ לתחום המפה.");
+    addLine("dotted", "קו מנוקד: מסלול מחוץ לתחום המפה שהוסק מגובה השטח, כי אין לו קו במפה הפתוחה. יש כאלה רק בסיני ובדרום ירדן, וכדי לראותם צריך להזיז את המפה.");
+  }
+  details.append(lineKey);
   if (aquifers.length) {
     details.append(el("h3", {}, "מי תהום: אקוויפרים"));
-    details.append(el("p", { class: "note" }, "אקוויפר הוא שכבת סלע נקבובית או סדוקה שמים נעים בתוכה. אקוויפרים יכולים לשכב זה מעל זה, ולכן אזורים במפה הכוללת חופפים. הגבולות סכמטיים."));
+    details.append(el("p", { class: "note" }, "אקוויפר הוא שכבת סלע נקבובית או סדוקה שמים נעים בתוכה. הגבולות סכמטיים."));
     const toggleInput = el("input", { type: "checkbox", id: "all-aquifers" });
     toggleInput.checked = showAllAquifers;
     toggleInput.addEventListener("change", () => setShowAllAquifers(toggleInput.checked));
     details.append(el("label", { class: "toggle" }, toggleInput, el("span", {}, "הצג את כל האקוויפרים על המפה")));
-    if (showAllAquifers) details.append(el("p", { class: "note" }, "לחצו על אזור במפה כדי לפתוח אותו. באזור חופף, לחיצה נוספת עוברת לאקוויפר הבא."));
+    if (showAllAquifers) details.append(el("p", { class: "note" }, "לחצו על אזור במפה כדי לפתוח אותו."));
     const list = el("ul", { class: "legend" });
     for (const entry of aquifers) {
       list.append(el("li", {}, el("button", { type: "button", onclick: () => selectAquifer(entry) },
@@ -373,16 +382,6 @@ function syncAllAquifers() {
   }
 }
 
-// Shoelace formula in degrees: good enough to compare aquifers with each other.
-function ringArea(ring) {
-  let sum = 0;
-  ring.forEach(([x0, y0], index) => {
-    const [x1, y1] = ring[(index + 1) % ring.length];
-    sum += x0 * y1 - x1 * y0;
-  });
-  return Math.abs(sum) / 2;
-}
-
 // Ray casting: a point is inside if a ray from it crosses the ring an odd number of times.
 function ringContains(ring, lng, lat) {
   let inside = false;
@@ -393,11 +392,8 @@ function ringContains(ring, lng, lat) {
   return inside;
 }
 
-// Smallest first, so a small aquifer inside a large one can be reached.
-function aquifersAt(latlng) {
-  return aquifers
-    .filter((entry) => ringContains(entry.ring, latlng.lng, latlng.lat))
-    .sort((a, b) => ringArea(a.ring) - ringArea(b.ring));
+function aquiferAt(latlng) {
+  return aquifers.find((entry) => ringContains(entry.ring, latlng.lng, latlng.lat));
 }
 
 // When true, a click on the map is about aquifers rather than streams.
@@ -405,13 +401,12 @@ function aquifersInFocus() {
   return selected === null && (showAllAquifers || aquifer);
 }
 
-// In an overlap each click moves on to the next aquifer there. Outside all of them, close.
+// A click on an aquifer opens it. Outside all of them, close.
 function clickMap(latlng) {
   if (aquifersInFocus()) {
-    const here = aquifersAt(latlng);
-    if (here.length) {
-      const next = here[(here.indexOf(aquifer) + 1) % here.length];
-      if (next !== aquifer) selectAquifer(next);
+    const here = aquiferAt(latlng);
+    if (here) {
+      if (here !== aquifer) selectAquifer(here);
       return;
     }
   }
@@ -433,7 +428,6 @@ function showAquiferShape(entry) {
     interactive: false,
     color: entry.color,
     weight: 2,
-    dashArray: "6 5",
     fillOpacity: 0.16,
   }).addTo(map);
 }

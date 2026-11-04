@@ -149,6 +149,13 @@ a { color: var(--accent); }
 
 #panel > footer p { margin: 0; }
 
+.about { margin-block-end: .4rem; }
+.about summary { cursor: pointer; }
+.about[open] { max-height: 35vh; overflow-y: auto; }
+.about p { margin-block: .35rem; }
+.about h2 { margin: .5rem 0 .25rem; font-size: inherit; }
+.about ul { display: flex; flex-wrap: wrap; gap: .1rem .75rem; margin: 0; padding: 0; list-style: none; }
+
 .legend { display: grid; gap: .15rem; margin: 0; padding: 0; list-style: none; }
 
 .legend button {

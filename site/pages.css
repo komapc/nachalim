@@ -1,0 +1,19 @@
+/* The static stream pages. Colours and the shared classes come from style.css. */
+html, body { height: auto; }
+
+body.page {
+  display: block;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+body.page a { color: var(--accent); }
+.crumbs { font-size: .85rem; color: var(--muted); }
+body.page h1 { margin: .75rem 0 .1rem; font-size: 1.7rem; }
+body.page h2 { margin: 1.4rem 0 .4rem; font-size: 1.1rem; }
+.basin-line { margin: .2rem 0; color: var(--muted); }
+.to-map { display: inline-block; font-weight: 600; }
+.stream-list { display: flex; flex-wrap: wrap; gap: .15rem 1rem; margin: 0; padding: 0; list-style: none; }
+body.page > footer { margin-block-start: 2rem; padding-block-start: .6rem; font-size: .75rem; color: var(--muted); border-block-start: 1px solid var(--line); }
+body.page > footer p { margin: 0; }

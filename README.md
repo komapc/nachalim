@@ -16,6 +16,7 @@ The site has no build step: `site/` is served as it is, and GitHub Pages deploys
 | --- | --- |
 | `site/app.js` | All of the interface: map, panel, search, links |
 | `site/consent.js` | Consent banner. Google Analytics loads only after "allow"; the Measurement ID is `data-ga` in `index.html` |
+| Cloudflare Web Analytics | Cookieless visit counter, loaded for everyone from a tag in `index.html`; no consent needed |
 | `site/data/` | The data the page loads, see below |
 | `site/vendor/` | Leaflet and MapLibre, kept in the repository |
 | `scripts/` | The data pipeline, and `make_og.py` and `make_icons.py`, which render the link preview and the favicons and need Playwright |

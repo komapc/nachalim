@@ -3,14 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>נחלי ישראל: מפה אינטראקטיבית</title>
-  <meta name="description" content="מפה אינטראקטיבית של נחלי ישראל: לחצו על נחל וגלו לאיזה אגן הוא שייך, לאן הוא נשפך ומי יובליו.">
+  <title>מפת נחלי ישראל: אגני ניקוז, נחלי איתן ונחלי אכזב</title>
+  <meta name="description" content="מפה אינטראקטיבית של כ-900 נחלים בישראל: לחצו על נחל וגלו לאיזה אגן ניקוז הוא שייך, לאן הוא נשפך, מי יובליו והאם הוא נחל איתן או נחל אכזב.">
+  <meta name="keywords" content="נחלי ישראל, מפת נחלים, נחלים בישראל, אגן ניקוז, נחל איתן, נחל אכזב, יובלים, אקוויפר, מי תהום">
   <link rel="canonical" href="https://nachalim.lipu.dev/">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="he_IL">
   <meta property="og:site_name" content="נחלי ישראל">
-  <meta property="og:title" content="נחלי ישראל: מפה אינטראקטיבית">
-  <meta property="og:description" content="לחצו על נחל וגלו לאיזה אגן הוא שייך, לאן הוא נשפך ומי יובליו.">
+  <meta property="og:title" content="מפת נחלי ישראל: אגני ניקוז, נחלי איתן ונחלי אכזב">
+  <meta property="og:description" content="לחצו על נחל וגלו לאיזה אגן ניקוז הוא שייך, לאן הוא נשפך, מי יובליו והאם הוא נחל איתן או נחל אכזב.">
   <meta property="og:url" content="https://nachalim.lipu.dev/">
   <meta property="og:image" content="https://nachalim.lipu.dev/og.png">
   <meta property="og:image:width" content="1200">
@@ -25,6 +26,7 @@
   <link rel="stylesheet" href="vendor/maplibre/maplibre-gl.css">
   <link rel="stylesheet" href="style.css">
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "d4add1b1a478489f9e3301ca617749a1"}'></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "Map", "name": "מפת נחלי ישראל: אגני ניקוז, נחלי איתן ונחלי אכזב", "url": "https://nachalim.lipu.dev/", "description": "מפה אינטראקטיבית של כ-900 נחלים בישראל: לחצו על נחל וגלו לאיזה אגן ניקוז הוא שייך, לאן הוא נשפך, מי יובליו והאם הוא נחל איתן או נחל אכזב.", "inLanguage": "he", "keywords": "נחלי ישראל, מפת נחלים, נחלים בישראל, אגן ניקוז, נחל איתן, נחל אכזב, יובלים, אקוויפר, מי תהום", "about": {"@type": "Thing", "name": "נחלי ישראל"}}</script>
 </head>
 <body>
   <aside id="panel" aria-label="מידע על נחלים">
@@ -42,6 +44,42 @@
     </header>
     <section id="details" aria-live="polite"></section>
     <footer>
+      <details class="about">
+        <summary>על המפה</summary>
+        <p>מפת נחלי ישראל מציגה כ-900 נחלים ונהרות בישראל ובאזור. לכל נחל מופיעים אגן הניקוז שלו, המוצא שאליו הוא נשפך (הים התיכון, הכנרת, ים המלח או מפרץ אילת), היובלים שלו ותקציר מוויקיפדיה.</p>
+        <p>אפשר להסתיר את נחלי האכזב, שזורמים בעיקר בחורף, ולהשאיר רק את נחלי האיתן, שזורמים כל השנה. במפה מסומנים גם האקוויפרים, שכבות מי התהום, והנחלים שמקבלים מהם מים.</p>
+        <h2>נחלים במפה</h2>
+        <ul>
+          <li><a href="#נהר-הירדן">נהר הירדן</a></li>
+          <li><a href="#נחל-ירקון">נחל ירקון</a></li>
+          <li><a href="#נחל-קישון">נחל קישון</a></li>
+          <li><a href="#נחל-דן">נחל דן</a></li>
+          <li><a href="#נחל-שניר">נחל שניר</a></li>
+          <li><a href="#נחל-כזיב">נחל כזיב</a></li>
+          <li><a href="#נחל-עמוד">נחל עמוד</a></li>
+          <li><a href="#נחל-ציפורי">נחל ציפורי</a></li>
+          <li><a href="#נחל-חרוד">נחל חרוד</a></li>
+          <li><a href="#נחל-תבור">נחל תבור</a></li>
+          <li><a href="#נחל-משושים">נחל משושים</a></li>
+          <li><a href="#נחל-יהודיה">נחל יהודיה</a></li>
+          <li><a href="#נחל-תנינים">נחל תנינים</a></li>
+          <li><a href="#נחל-חדרה">נחל חדרה</a></li>
+          <li><a href="#נחל-אלכסנדר">נחל אלכסנדר</a></li>
+          <li><a href="#נחל-פולג">נחל פולג</a></li>
+          <li><a href="#נחל-איילון">נחל איילון</a></li>
+          <li><a href="#נחל-שורק">נחל שורק</a></li>
+          <li><a href="#נחל-האלה">נחל האלה</a></li>
+          <li><a href="#נחל-לכיש">נחל לכיש</a></li>
+          <li><a href="#נחל-שקמה">נחל שקמה</a></li>
+          <li><a href="#נחל-הבשור">נחל הבשור</a></li>
+          <li><a href="#נחל-באר-שבע">נחל באר שבע</a></li>
+          <li><a href="#נחל-צין">נחל צין</a></li>
+          <li><a href="#נחל-פארן">נחל פארן</a></li>
+          <li><a href="#נחל-ערוגות">נחל ערוגות</a></li>
+          <li><a href="#נחל-דוד">נחל דוד</a></li>
+          <li><a href="#נחל-קדרון">נחל קדרון</a></li>
+        </ul>
+      </details>
       <p>הנתונים הופקו אוטומטית ועלולים להכיל טעויות.</p>
       <p>
         גיאוגרפיה: <a href="https://www.openstreetmap.org/copyright" lang="en" dir="ltr">© OpenStreetMap</a> ·

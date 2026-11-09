@@ -774,7 +774,6 @@ Promise.all([
   fetch("data/aquifers.json").then((response) => response.json()).catch(() => []),
   fetch("data/outside.geojson").then((response) => response.json()).catch(() => null),
 ]).then(([geojson, infoData, aquiferData, outside]) => {
-  loaded = true;
   info = infoData;
   aquifers = aquiferData;
   for (const entry of aquifers) aquiferBySlug.set(entry.id, entry);
@@ -809,9 +808,10 @@ Promise.all([
   const dryCount = Object.values(info).filter((entry) => !flows(entry.f)).length;
   document.getElementById("dry-count").textContent = `(${dryCount.toLocaleString("he-IL")})`;
   renderOverview();
+  loaded = true;
   openFromHash();
 }).catch((error) => {
-  // Only a failed download says so; a bug after it must not wipe the panel.
+  // Until the panel is drawn, any failure says so; after it, a bug must not wipe the panel.
   if (!loaded) details.textContent = "טעינת הנתונים נכשלה. נסו לרענן את הדף.";
   console.error(error);
 });

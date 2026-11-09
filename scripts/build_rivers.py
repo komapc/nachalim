@@ -307,12 +307,23 @@ def merge_same_name(entities):
     return moved
 
 
-def apply_overrides(entities):
+def check_overrides(rules, names):
+    """Stop the build if a rule names a stream, or a parent, that the data does not have."""
+    unknown = [rule["name"] for rule in rules if rule["name"] not in names]
+    unknown += [rule["parent"] for rule in rules if "parent" in rule and rule["parent"] not in names]
+    if unknown:
+        sys.exit(f"{OVERRIDES_PATH.name}: no stream is named " + ", ".join(sorted(set(unknown))))
+
+
+def apply_overrides(entities, rules=None):
     """Apply scripts/overrides.json, the hand-made corrections, by stream name."""
+    if rules is None:
+        rules = read_json(OVERRIDES_PATH)
     by_name = collections.defaultdict(list)
     for entity in entities:
         by_name[entity["name"]].append(entity)
-    for rule in read_json(OVERRIDES_PATH):
+    check_overrides(rules, by_name)
+    for rule in rules:
         for entity in by_name.get(rule["name"], []):
             # Outlet research applies only to the untraced stream, not to namesakes.
             if "via" in rule:

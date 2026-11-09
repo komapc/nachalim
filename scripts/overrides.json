@@ -18,7 +18,7 @@
   {"name": "נחל אלכסנדר", "flow": "mixed"},
   {"name": "נחל פרת", "flow": "mixed"},
   {"name": "נחל זויתן", "flow": "mixed"},
-  {"name": "נחל גלבון", "flow": "mixed"},
+  {"name": "נחל גילבון", "flow": "mixed"},
   {"name": "נחל דישון", "flow": "mixed"},
   {"name": "נחל עיון", "flow": "mixed"},
   {"name": "נחל מכוך", "parent": "נהר הירדן", "via": "wiki"},

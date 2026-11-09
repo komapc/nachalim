@@ -341,6 +341,11 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
+// Leaflet puts tooltip text in as HTML, and the names come from OpenStreetMap.
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
 function linkButton(text, onclick) {
   return el("button", { class: "link", type: "button", onclick }, text);
 }
@@ -487,7 +492,7 @@ function syncAllAquifers() {
     for (const entry of aquifers) {
       L.tooltip({ permanent: true, direction: "center", className: "aquifer-label", pane: "tooltipPane" })
         .setLatLng(entry.label ? [entry.label[1], entry.label[0]] : L.latLngBounds(aquiferLatLngs(entry)).getCenter())
-        .setContent(shortName(entry))
+        .setContent(escapeHtml(shortName(entry)))
         .addTo(allAquifersLayer);
     }
     if (aquiferShape) aquiferShape.bringToFront();
@@ -691,7 +696,12 @@ function clearSelection() {
 
 // The page's address is #slug, of a stream or an aquifer.
 function openFromHash() {
-  const slug = decodeURIComponent(location.hash.slice(1));
+  let slug;
+  try {
+    slug = decodeURIComponent(location.hash.slice(1));
+  } catch {
+    return; // a broken address opens nothing
+  }
   if (idBySlug.has(slug)) select(idBySlug.get(slug), true);
   else if (aquiferBySlug.has(slug)) selectAquifer(aquiferBySlug.get(slug));
 }
@@ -699,8 +709,9 @@ function openFromHash() {
 // ---- Search ----
 
 // Compare without niqqud, a leading "stream of" or the definite article.
+// A query of only "נחל" thus becomes empty and lists nothing, until more is typed.
 function normalize(text) {
-  return text.replace(/[֑-ׇ]/g, "").replace(/^(נחל|נהר|ואדי|וואדי)\s+/, "").replace(/^ה/, "");
+  return text.replace(/[֑-ׇ]/g, "").replace(/^(נחל|נהר|ואדי|וואדי)(\s+|$)/, "").replace(/^ה/, "");
 }
 
 let searchTimer;
@@ -755,6 +766,7 @@ map.on("zoomend", restyle);
 map.on("click", (event) => clickMap(event.latlng));
 window.addEventListener("hashchange", openFromHash);
 
+let loaded = false;
 Promise.all([
   fetch("data/rivers.geojson").then((response) => response.json()),
   fetch("data/info.json").then((response) => response.json()),
@@ -762,6 +774,7 @@ Promise.all([
   fetch("data/aquifers.json").then((response) => response.json()).catch(() => []),
   fetch("data/outside.geojson").then((response) => response.json()).catch(() => null),
 ]).then(([geojson, infoData, aquiferData, outside]) => {
+  loaded = true;
   info = infoData;
   aquifers = aquiferData;
   for (const entry of aquifers) aquiferBySlug.set(entry.id, entry);
@@ -775,7 +788,7 @@ Promise.all([
           if (!outsideBySlug.has(s)) outsideBySlug.set(s, []);
           outsideBySlug.get(s).push(line);
         }
-        line.bindTooltip(s ? `המשך של ${n}` : n, { sticky: true, direction: "top" });
+        line.bindTooltip(escapeHtml(s ? `המשך של ${n}` : n), { sticky: true, direction: "top" });
         line.on("click", (event) => clickStream(event, null, () => {
           if (s) select(idBySlug.get(s), false);
         }));
@@ -788,7 +801,7 @@ Promise.all([
     style: styleFor,
     onEachFeature(feature, line) {
       layersById.set(feature.properties.i, line);
-      line.bindTooltip(feature.properties.n, { sticky: true, direction: "top" });
+      line.bindTooltip(escapeHtml(feature.properties.n), { sticky: true, direction: "top" });
       line.on("click", (event) => clickStream(event, info[feature.properties.i].s, () => select(feature.properties.i, false)));
     },
   }).addTo(map);
@@ -797,6 +810,8 @@ Promise.all([
   document.getElementById("dry-count").textContent = `(${dryCount.toLocaleString("he-IL")})`;
   renderOverview();
   openFromHash();
-}).catch(() => {
-  details.textContent = "טעינת הנתונים נכשלה. נסו לרענן את הדף.";
+}).catch((error) => {
+  // Only a failed download says so; a bug after it must not wipe the panel.
+  if (!loaded) details.textContent = "טעינת הנתונים נכשלה. נסו לרענן את הדף.";
+  console.error(error);
 });

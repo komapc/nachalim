@@ -8,7 +8,7 @@ Interactive map of the streams and rivers (נחלים) of Israel, in Hebrew, at 
 python3 -m http.server 8000 -d site
 ```
 
-The map needs no build: `site/` is served as it is. GitHub Pages deploys it on every push to `main` (`.github/workflows/pages.yml`), after `scripts/build_pages.py` writes the static stream pages and the sitemap. To see those pages locally, run that script first; its output is git-ignored.
+The map needs no build: `site/` is served as it is. GitHub Pages deploys it on every push to `main` (`.github/workflows/pages.yml`) once the tests pass, after `scripts/build_pages.py` writes the static stream pages and the sitemap. To see those pages locally, run that script first; its output is git-ignored.
 
 ## Layout
 
@@ -38,7 +38,7 @@ With unchanged downloads and Wikipedia cache the output is byte-identical, so af
 - `enrich_wiki.py` adds Hebrew Wikipedia summaries and writes `rivers.geojson` and `info.json`. Arabic text is removed from the summaries.
 - `build_outside.py` continues streams past the download box, as thin lines. They follow OpenStreetMap ways, except for the stretch of Wadi Rum described below. Where the ways do not join end to end, `scripts/outlet_joins.json` holds the path along them, which `join_outlets.py` finds and which is committed. A line stops where the ways stop: Nahal Lavan about 4 km short of Wadi al-Arish and Wadi al-Arish about 350 m short of the sea. The zoom-out limit still fits Israel; only panning reaches these lines.
 
-Each rule in `overrides.json` names a stream and can set `sink`, `parent`, `flow` and `via`.
+Each rule in `overrides.json` names a stream and can set `sink`, `parent`, `flow` and `via`. A rule whose stream or parent has no such name stops the build.
 
 ## Data decisions
 
@@ -90,7 +90,7 @@ pip install playwright==1.61.0 && playwright install chromium
 python3 -m unittest discover tests
 ```
 
-`tests/test_map_clicks.py` covers clicks on the map, and runs on every pull request. It serves `site/` itself and needs no network. Add new map tests with real mouse events: `map.fire("click")` skips the streams lying on top and has hidden a bug that way.
+`tests/test_map_clicks.py` covers clicks on the map, and the tests run on every pull request and before every deploy. It serves `site/` itself and needs no network. Add new map tests with real mouse events: `map.fire("click")` skips the streams lying on top and has hidden a bug that way.
 
 After a change to the pipeline, rebuild and read `git diff site/data`.
 

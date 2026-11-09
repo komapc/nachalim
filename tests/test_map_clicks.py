@@ -61,21 +61,26 @@ class MapClicks(unittest.TestCase):
         self.page.context.close()
         self.assertEqual(self.errors, [])
 
-    def open_page(self, width, height):
+    def open_page(self, width, height, address="", data=None):
+        """data maps a file under site/data/ to the JSON served in its place."""
         self.errors = []
+        self.data = data or {}
         context = self.browser.new_context(viewport={"width": width, "height": height})
         context.route("**/*", self.route)
         page = context.new_page()
         page.add_init_script("localStorage.setItem('lipu-consent', 'no')")
         page.on("pageerror", lambda error: self.errors.append(str(error)))
-        page.goto(self.base)
+        page.goto(self.base + address)
         page.wait_for_selector(".legend button")
         page.evaluate(FIND_POINT)
         return page
 
     def route(self, route):
         url = route.request.url
-        if url.startswith(self.base):
+        name = url[len(self.base):].removeprefix("data/") if url.startswith(self.base + "data/") else None
+        if name in self.data:
+            route.fulfill(content_type="application/json", body=json.dumps(self.data[name]))
+        elif url.startswith(self.base):
             route.continue_()
         elif "/styles/" in url:
             route.fulfill(content_type="application/json", body=EMPTY_STYLE)
@@ -196,6 +201,38 @@ class MapClicks(unittest.TestCase):
         chips, area = self.page.locator(".chips").bounding_box(), panel.bounding_box()
         self.assertGreaterEqual(chips["y"], area["y"] - 1)
         self.assertLess(chips["y"], area["y"] + area["height"])
+
+
+    def test_broken_address_still_shows_the_map(self):
+        self.page.context.close()
+        self.page = self.open_page(1280, 900, "#%E0%A4")
+        self.assertEqual(self.open_card(), (None, None))
+        self.assertNotIn("נכשלה", self.page.inner_text("#details"))
+
+    def test_stream_name_is_shown_as_text(self):
+        name = '<img src=x onerror="window.injected = 1">'
+        rivers = json.loads((SITE / "data" / "rivers.geojson").read_text(encoding="utf-8"))
+        rivers["features"][0]["properties"]["n"] = name
+        self.page.context.close()
+        self.page = self.open_page(1280, 900, data={"rivers.geojson": rivers})
+        stream_id = rivers["features"][0]["properties"]["i"]
+        point = self.page.evaluate("(id) => middleOf(id)", stream_id)
+        self.go_to(point)
+        x, y = self.page.evaluate("([lat, lng]) => { const p = map.latLngToContainerPoint([lat, lng]); return [p.x, p.y]; }", point)
+        box = self.page.locator("#map").bounding_box()
+        self.page.mouse.move(box["x"] + x, box["y"] + y)
+        tooltip = self.page.locator(".leaflet-tooltip").first
+        tooltip.wait_for()
+        self.assertEqual(tooltip.inner_text(), name)
+        self.assertEqual(tooltip.locator("img").count(), 0)
+        self.assertIsNone(self.page.evaluate("window.injected"))
+
+    def test_search_for_bare_prefix_lists_nothing(self):
+        for query in ("נחל", "נחל "):
+            self.page.fill("#q", query)
+            self.assertTrue(self.page.locator("#results").is_hidden())
+        self.page.fill("#q", "נחל ירקון")
+        self.assertIn("נחל ירקון", self.page.inner_text("#results"))
 
 
 if __name__ == "__main__":

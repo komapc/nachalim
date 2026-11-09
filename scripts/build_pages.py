@@ -240,6 +240,8 @@ class Builder:
         (pages / "index.html").write_text(self.list_page(), encoding="utf-8")
         for entry_id, entry in self.info.items():
             folder = pages / entry["s"]
+            if folder.exists():
+                sys.exit(f"build_pages.py: two streams share the folder n/{entry['s']}/ (stream {entry_id})")
             folder.mkdir()
             (folder / "index.html").write_text(self.stream_page(entry_id, entry), encoding="utf-8")
             if is_indexable(entry):

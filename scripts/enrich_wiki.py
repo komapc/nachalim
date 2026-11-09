@@ -169,9 +169,14 @@ def fetch_pages(rivers, cache):
 
 
 def assign_slugs(rivers):
-    """URL keys: the name, with a number from the second stream of that name on."""
+    """URL keys: the name, with a number from the second stream of that name on.
+
+    Namesakes are numbered longest first, with the mouth breaking ties, so the
+    numbers do not depend on the order of OpenStreetMap's elements. (A change in
+    length that reorders two namesakes would still swap their addresses.)
+    """
     slugs = collections.Counter()
-    for river in rivers:
+    for river in sorted(rivers, key=lambda r: (-r["km"], r["mouth"])):
         slugs[river["name"]] += 1
         base = river["name"].replace(" ", "-")
         river["slug"] = base if slugs[river["name"]] == 1 else f"{base}-{slugs[river['name']]}"

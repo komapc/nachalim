@@ -8,7 +8,7 @@ Interactive map of the streams and rivers (נחלים) of Israel, in Hebrew, at 
 python3 -m http.server 8000 -d site
 ```
 
-The map needs no build: `site/` is served as it is. GitHub Pages deploys it on every push to `main` (`.github/workflows/pages.yml`) once the tests pass, after `scripts/build_pages.py` writes the static stream pages and the sitemap. To see those pages locally, run that script first; its output is git-ignored.
+The map needs no build: `site/` is served as it is. GitHub Pages deploys it on every push to `main` (`.github/workflows/pages.yml`) once the tests pass, after `scripts/build_pages.py` writes the static stream and basin pages and the sitemap. To see those pages locally, run that script first; its output is git-ignored.
 
 ## Layout
 
@@ -19,6 +19,7 @@ The map needs no build: `site/` is served as it is. GitHub Pages deploys it on e
 | Cloudflare Web Analytics | Cookieless visit counter, loaded for everyone from a tag in `index.html`; no consent needed |
 | `site/data/` | The data the page loads, see below |
 | `site/n/` | Generated: a page for each stream and a list of them, for search engines. Streams with no tributaries and no real summary get `noindex` and stay out of the sitemap |
+| `site/basin/` | Generated: a page for each drainage basin of at least three streams, listing every stream in it, and a list of the basins. Stream pages link their basin's page |
 | `site/vendor/` | Leaflet and MapLibre, kept in the repository |
 | `scripts/` | The data pipeline, and `make_og.py` and `make_icons.py`, which render the link preview and the favicons and need Playwright |
 | `raw/` | Downloads and intermediate files, git-ignored |

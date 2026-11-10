@@ -7,4 +7,5 @@ raw/
 *.log
 __pycache__/
 site/n/
+site/basin/
 site/sitemap.xml

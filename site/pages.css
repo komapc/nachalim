@@ -17,3 +17,6 @@ body.page h2 { margin: 1.4rem 0 .4rem; font-size: 1.1rem; }
 .stream-list { display: flex; flex-wrap: wrap; gap: .15rem 1rem; margin: 0; padding: 0; list-style: none; }
 body.page > footer { margin-block-start: 2rem; padding-block-start: .6rem; font-size: .75rem; color: var(--muted); border-block-start: 1px solid var(--line); }
 body.page > footer p { margin: 0; }
+.basin-list { columns: 14rem; column-gap: 1.5rem; margin: 0; padding: 0; list-style: none; }
+.basin-list li { break-inside: avoid; }
+.km { color: var(--muted); font-size: .85em; }

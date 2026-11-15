@@ -15,7 +15,7 @@ The map needs no build: `site/` is served as it is. GitHub Pages deploys it on e
 | Path | What it is |
 | --- | --- |
 | `site/app.js` | All of the interface: map, panel, search, links |
-| `site/consent.js` | Consent banner. Google Analytics loads only after "allow"; the Measurement ID is `data-ga` in `index.html` |
+| Consent | The shared lipu.dev script `https://geo.lipu.dev/consent.js` (source: komapc/lipu-hub `geo/client/`). In the EU/EEA, UK and CH Google Analytics loads only after "allow"; elsewhere it loads with a notice and an opt-out. The footer link "הגדרות אנליטיקה" reopens it. The Measurement ID is `data-ga` in `index.html` |
 | Cloudflare Web Analytics | Cookieless visit counter, loaded for everyone from a tag in `index.html`; no consent needed |
 | `site/data/` | The data the page loads, see below |
 | `site/n/` | Generated: a page for each stream and a list of them, for search engines. Streams with no tributaries and no real summary get `noindex` and stay out of the sitemap |

@@ -77,7 +77,7 @@ class Builder:
         self.shared_names = {name for name in names if names.count(name) > 1}
         home = (SITE / "index.html").read_text(encoding="utf-8")
         self.beacon = re.search(r"<script defer src=\"https://static\.cloudflareinsights\.com/[^>]*></script>", home).group(0)
-        self.consent = re.search(r'<script src="consent\.js"[^>]*></script>', home).group(0).replace('src="consent.js"', 'src="/consent.js"')
+        self.consent = re.search(r'<script src="https://geo\.lipu\.dev/consent\.js"[^>]*></script>', home).group(0)
 
     def entry(self, entry_id):
         return self.info[str(entry_id)]
@@ -172,7 +172,8 @@ class Builder:
     <p>גיאוגרפיה: <a href="https://www.openstreetmap.org/copyright" lang="en" dir="ltr">© OpenStreetMap</a> ·
     תקצירים: <a href="https://he.wikipedia.org/">ויקיפדיה</a>
     (<a href="https://creativecommons.org/licenses/by-sa/4.0/deed.he" lang="en" dir="ltr">CC BY-SA</a>) ·
-    <a href="https://lipu.dev/" lang="en" dir="ltr">lipu.dev</a></p>
+    <a href="https://lipu.dev/" lang="en" dir="ltr">lipu.dev</a> ·
+    <a href="#" data-lipu-consent-open>הגדרות אנליטיקה</a></p>
   </footer>
   {self.consent}
 </body>

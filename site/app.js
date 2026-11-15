@@ -5,7 +5,7 @@
 
 // ---- Constants ----
 
-// Analytics event; gtag exists only after the visitor agreed, see consent.js.
+// Analytics event; gtag exists only once GA has loaded (https://geo.lipu.dev/consent.js).
 const track = (name, params) => window.gtag?.("event", name, params);
 
 // Line colours by where the water ends up. make_og.py repeats the colours.

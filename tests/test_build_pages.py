@@ -73,7 +73,8 @@ class BuildPages(unittest.TestCase):
         self.assertIn("he.wikipedia.org/wiki/", page)
         self.assertIn("CC BY-SA", page)
         self.assertIn("cloudflareinsights", page)
-        self.assertIn('src="/consent.js"', page)
+        self.assertIn('src="https://geo.lipu.dev/consent.js"', page)
+        self.assertIn("data-lipu-consent-open", page)
         self.assertIn(f'href="/#{build_pages.quote(yarkon["s"], safe="")}"', page)
 
     def test_structured_data_parses(self):

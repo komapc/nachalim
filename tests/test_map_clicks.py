@@ -244,11 +244,17 @@ class MapClicks(unittest.TestCase):
         self.assertEqual(self.page.evaluate("(id) => nameAnchors.get(id)", jordan), anchor)
 
     def test_search_for_bare_prefix_lists_nothing(self):
-        for query in ("נחל", "נחל "):
+        for query in ("נחל", "נחל ", "-", "נחל-"):
             self.page.fill("#q", query)
             self.assertTrue(self.page.locator("#results").is_hidden())
         self.page.fill("#q", "נחל ירקון")
         self.assertIn("נחל ירקון", self.page.inner_text("#results"))
+
+    def test_search_reads_a_hyphen_as_a_space(self):
+        name = self.page.evaluate("Object.values(info).map((entry) => entry.n).find((n) => /\\S-\\S/.test(n))")
+        self.assertIsNotNone(name)
+        self.page.fill("#q", name.replace("-", " "))
+        self.assertIn(name, self.page.inner_text("#results"))
 
 
 if __name__ == "__main__":

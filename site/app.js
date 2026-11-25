@@ -829,16 +829,17 @@ function openFromHash() {
 
 // ---- Search ----
 
-// Compare without niqqud, a leading "stream of" or the definite article.
-// A query of only "נחל" thus becomes empty and lists nothing, until more is typed.
+// Compare without niqqud, a leading "stream of" or the definite article, and with a hyphen
+// or maqaf read as a space: "בן דור" finds "נחל בן-דור".
+// A query of only "נחל", or only a hyphen, thus becomes empty and lists nothing, until more is typed.
 function normalize(text) {
-  return text.replace(/[֑-ׇ]/g, "").replace(/^(נחל|נהר|ואדי|וואדי)(\s+|$)/, "").replace(/^ה/, "");
+  return text.replace(/[-־]/g, " ").trim().replace(/[֑-ׇ]/g, "").replace(/^(נחל|נהר|ואדי|וואדי)(\s+|$)/, "").replace(/^ה/, "");
 }
 
 let searchTimer;
 
 function renderSearch() {
-  const query = normalize(search.value.trim());
+  const query = normalize(search.value);
   results.replaceChildren();
   results.hidden = !query;
   clearTimeout(searchTimer);

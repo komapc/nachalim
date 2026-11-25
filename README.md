@@ -70,7 +70,7 @@ Twelve streams of the southern Arava end in the Yotvata salt flat, shown as a cl
 
 `rivers.geojson` holds the geometry, with properties `i` (the id), `d`, `k`, `n` and `f`. `outside.geojson` holds the lines past the box, with `s` and `n`.
 
-Stream names are drawn from `rivers.geojson` by a second, transparent MapLibre map above the lines, in the pane `names`, which ignores the pointer. Each stream has one horizontal name, halfway along its longest line. Longer streams appear at lower zooms and win when names collide. A dimmed stream has no name, and the selected one always has.
+Stream names are drawn from `rivers.geojson` by a second, transparent MapLibre map above the lines, in the pane `names`, which ignores the pointer. Each stream has one horizontal name, halfway along its longest line while that point is on the map. When it is not, as when zoomed in on one end of a long stream, the name moves to the middle of the longest stretch of the stream on the map, and stays there while the map only pans and that spot is still in view; a change of zoom places the names afresh. Longer streams appear at lower zooms and win when names collide. A dimmed stream has no name, and the selected one always has.
 
 `aquifers.json` is written by hand and the rebuild scripts do not touch it. Each aquifer has `id`, `name`, `color`, `ring` (the polygon, as `[lng, lat]`), `label` (where its name goes on the map), `rock`, `note`, `rivers` (slugs of linked streams) and `empty` (the text shown when `rivers` is empty), and optionally `recharge`, `production` and `discharge`.
 

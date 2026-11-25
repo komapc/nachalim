@@ -41,6 +41,8 @@ With unchanged downloads and Wikipedia cache the output is byte-identical, so af
 
 Each rule in `overrides.json` names a stream and can set `sink`, `parent`, `flow` and `via`. A rule whose stream or parent has no such name stops the build.
 
+`scripts/names.json` gives a name to OpenStreetMap ways that draw a stream but carry no name. Each rule lists the ways, with a `source` and a `quote` from it. The names are applied before the ways are grouped, and these streams get the last ids, so the other streams keep theirs. A listed way that is missing from the download, or that has a name of its own, stops the build. At present the file holds one stream, נחל בן-דור in Nesher. Hebrew Wikipedia places it east of the Ben Dor neighbourhood, between it and Tel Hanan and Giv'at Amos, which is the upper half of the line. The lower half, from the Tel Hanan industrial area to the Kishon, is inferred. An unnamed channel starts about 630 m due north of where the upper half ends, and OpenStreetMap has no line between the two.
+
 ## Data decisions
 
 Flow type comes from `overrides.json`, then the opening of the Hebrew Wikipedia article, then OpenStreetMap tags, whose `intermittent` tag is often wrong.

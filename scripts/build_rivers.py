@@ -23,6 +23,7 @@ NAME_RE = re.compile(r"^(נחל|נהר|ואדי|וואדי|ערוץ|יובל|ע�
 SNAP_M = 120  # a way ending this close to another one is taken to flow into it
 SAME_STREAM_M = 3000  # same-named ways this close are pieces of one stream
 OVERRIDES_PATH = pathlib.Path(__file__).with_name("overrides.json")
+NAMES_PATH = pathlib.Path(__file__).with_name("names.json")
 
 
 def read_json(path):
@@ -159,11 +160,35 @@ def classify_sink(point, grids):
     return None
 
 
+def apply_names(ways, rules=None):
+    """Name the ways listed in scripts/names.json: streams OpenStreetMap draws but does not name.
+
+    Stops the build if a listed way is missing from the download or already has a name,
+    so that a rule is looked at again once OpenStreetMap changes there."""
+    if rules is None:
+        rules = read_json(NAMES_PATH)
+    by_id = {way["id"]: way for way in ways}
+    problems = []
+    for rule in rules:
+        for way_id in rule["ways"]:
+            way = by_id.get(way_id)
+            if way is None:
+                problems.append(f"way {way_id} is not in the download")
+            elif any(key == "name" or key.startswith("name:") for key in way["tags"]):
+                problems.append(f"way {way_id} already has a name")
+            else:
+                way["tags"] = {**way["tags"], "name:he": rule["name"]}
+                way["sourced"] = True
+    if problems:
+        sys.exit(f"{NAMES_PATH.name}: " + "; ".join(problems))
+
+
 def build_entities(ways):
     """Group ways into streams. Returns (entities, Counter of rejected names)."""
     by_name = collections.defaultdict(list)
     skipped = collections.Counter()
-    for way in ways:
+    # Ways named by names.json come last, so that the other streams keep their ids.
+    for way in sorted(ways, key=lambda way: way.get("sourced", False)):
         name = name_of(way["tags"])
         if not name:
             continue
@@ -376,6 +401,7 @@ def main():
     ways_path, sinks_path, out_dir = sys.argv[1:4]
     ways = load_ways(ways_path)
     grids = load_sinks(sinks_path)
+    apply_names(ways)
     entities, skipped = build_entities(ways)
     resolve(entities, ways, grids)
     moved = merge_same_name(entities)

@@ -1,0 +1,12 @@
+[
+  {
+    "name": "נחל בן-דור",
+    "source": "https://he.wikipedia.org/wiki/בן_דור_(שכונה)",
+    "quote": "ממזרחה עובר נחל בן-דור אשר מפריד בינה לבין השכונה הוותיקה תל חנן והשכונה החדשה יותר, גבעת עמוס",
+    "note": "The stream on the east side of Ben Dor in Nesher: its valley, then the culvert to the drain along the Ben Dor / Giv'at Amos boundary, from where the culvert joins it. The drain above that point (1239848403, 1239848402, 1238895193; origin unknown in OSM) is left out. Then about 630 m with no line across the Tel Hanan industrial area, directly north, and the channel to 904193394, an unnamed river channel that reaches the Kishon about 260 m later and is left unnamed.",
+    "ways": [
+      976776701, 976776704, 1238895192, 1238682862, 1238682860, 1238682861, 1238682864, 1008223056, 654593086,
+      570030996, 587674266, 587674265, 587674263, 587674262
+    ]
+  }
+]

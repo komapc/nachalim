@@ -247,7 +247,8 @@ function restyle() {
 // A MapLibre layer of its own, above the stream lines, so that lines cannot cover a name.
 // Longer streams get a name first. MapLibre zoom levels are one below Leaflet's.
 const NAME_TIERS = [
-  { id: "names-short", minKm: 0, minZoom: 11.5 },
+  { id: "names-short", minKm: 0, minZoom: 11 },
+  { id: "names-small", minKm: 3, minZoom: 10.5 },
   { id: "names-medium", minKm: 5, minZoom: 10 },
   { id: "names-long", minKm: 15, minZoom: 8.5 },
   { id: "names-longest", minKm: 40, minZoom: 6 },
@@ -259,8 +260,13 @@ const NAME_PAINT = {
   "text-halo-color": "#fff",
   "text-halo-width": 2.5,
 };
+// A name is anchored at least this far inside the edges of the map, in pixels, so that it shows whole.
+const NAME_INSET = { x: 70, y: 24 };
 let nameMap = null;
 let namesReady = false;
+let nameStreams = []; // { properties, parts, home } for each stream; parts are lines of [lng, lat]
+const nameAnchors = new Map(); // stream id -> [lng, lat] where its name is drawn
+let namesZoom = null; // the zoom the names were last placed at
 
 function nameLayout(size, font) {
   return {
@@ -271,16 +277,130 @@ function nameLayout(size, font) {
   };
 }
 
-// One point per stream, halfway along its longest line, so that a name stays horizontal.
-function namePoints(geojson) {
-  const features = geojson.features.map(({ properties, geometry }) => {
-    const line = geometry.coordinates.reduce((a, b) => (b.length > a.length ? b : a));
-    return { type: "Feature", properties, geometry: { type: "Point", coordinates: line[Math.floor(line.length / 2)] } };
-  });
+// Lengths are compared, not measured, so degrees scaled by the latitude are enough.
+function distance(a, b) {
+  return Math.hypot((b[0] - a[0]) * Math.cos((a[1] * Math.PI) / 180), b[1] - a[1]);
+}
+
+function lineLength(line) {
+  let length = 0;
+  for (let j = 1; j < line.length; j++) length += distance(line[j - 1], line[j]);
+  return length;
+}
+
+// The point the given distance along a line.
+function pointAlong(line, target) {
+  for (let j = 1; j < line.length; j++) {
+    const step = distance(line[j - 1], line[j]);
+    if (step >= target && step > 0) {
+      const t = target / step;
+      return [line[j - 1][0] + t * (line[j][0] - line[j - 1][0]), line[j - 1][1] + t * (line[j][1] - line[j - 1][1])];
+    }
+    target -= step;
+  }
+  return line[line.length - 1];
+}
+
+const inBox = ([lng, lat], box) => lng >= box.west && lng <= box.east && lat >= box.south && lat <= box.north;
+
+// The part of the segment a-b inside box (Liang-Barsky), as [start, end, enters, leaves], or null.
+function clipSegment(a, b, box) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  let t0 = 0;
+  let t1 = 1;
+  for (const [p, q] of [[-dx, a[0] - box.west], [dx, box.east - a[0]], [-dy, a[1] - box.south], [dy, box.north - a[1]]]) {
+    if (p === 0) {
+      if (q < 0) return null;
+    } else if (p < 0) {
+      t0 = Math.max(t0, q / p);
+    } else {
+      t1 = Math.min(t1, q / p);
+    }
+    if (t0 > t1) return null;
+  }
+  const at = (t) => [a[0] + t * dx, a[1] + t * dy];
+  return [at(t0), at(t1), t0 > 0, t1 < 1];
+}
+
+// The middle of the longest unbroken stretch of the stream inside box, or null if none is.
+function middleOfLongestRun(parts, box) {
+  let best = null;
+  let bestLength = 0;
+  for (const { line, bounds } of parts) {
+    if (bounds.west > box.east || bounds.east < box.west || bounds.south > box.north || bounds.north < box.south) continue;
+    let run = [];
+    let length = 0;
+    const finish = () => {
+      if (length > bestLength) [best, bestLength] = [run, length];
+      run = [];
+      length = 0;
+    };
+    for (let j = 1; j < line.length; j++) {
+      const piece = clipSegment(line[j - 1], line[j], box);
+      if (!piece) {
+        finish();
+        continue;
+      }
+      const [start, end, enters, leaves] = piece;
+      if (enters) finish();
+      if (!run.length) run.push(start);
+      run.push(end);
+      length += distance(start, end);
+      if (leaves) finish();
+    }
+    finish();
+  }
+  return best && pointAlong(best, bestLength / 2);
+}
+
+// A stream's name is drawn at its home, halfway along its longest line, while that is on
+// the map. Otherwise it moves to the middle of the longest stretch of the stream on the map.
+// While the map only pans, a name stays where it is as long as that spot is on the map, so
+// that names do not jump; a change of zoom places them afresh.
+function placeNames() {
+  const size = map.getSize();
+  const corner = map.containerPointToLatLng([NAME_INSET.x, NAME_INSET.y]);
+  const opposite = map.containerPointToLatLng([size.x - NAME_INSET.x, size.y - NAME_INSET.y]);
+  const box = { west: corner.lng, east: opposite.lng, south: opposite.lat, north: corner.lat };
+  const panned = map.getZoom() === namesZoom;
+  namesZoom = map.getZoom();
+  let changed = false;
+  for (const { properties, parts, home } of nameStreams) {
+    const previous = nameAnchors.get(properties.i);
+    let anchor;
+    if (panned && previous && inBox(previous, box)) anchor = previous;
+    else if (inBox(home, box)) anchor = home;
+    else anchor = middleOfLongestRun(parts, box) ?? previous ?? home;
+    if (anchor !== previous) {
+      nameAnchors.set(properties.i, anchor);
+      changed = true;
+    }
+  }
+  if (changed && namesReady) nameMap.getSource("streams").setData(namePoints());
+}
+
+function namePoints() {
+  const features = nameStreams.map(({ properties }) => (
+    { type: "Feature", properties, geometry: { type: "Point", coordinates: nameAnchors.get(properties.i) } }));
   return { type: "FeatureCollection", features };
 }
 
 function addNameLabels(geojson) {
+  nameStreams = geojson.features.map(({ properties, geometry }) => {
+    const parts = geometry.coordinates.map((line) => {
+      const lngs = line.map(([lng]) => lng);
+      const lats = line.map(([, lat]) => lat);
+      return {
+        line, length: lineLength(line),
+        bounds: { west: Math.min(...lngs), east: Math.max(...lngs), south: Math.min(...lats), north: Math.max(...lats) },
+      };
+    });
+    const longest = parts.reduce((a, b) => (b.length > a.length ? b : a));
+    return { properties, parts, home: pointAlong(longest.line, longest.length / 2) };
+  });
+  placeNames();
+  map.on("moveend", placeNames);
   map.createPane("names").style.zIndex = 450;
   map.getPane("names").style.pointerEvents = "none";
   const labels = L.maplibreGL({
@@ -289,7 +409,7 @@ function addNameLabels(geojson) {
     style: {
       version: 8,
       glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
-      sources: { streams: { type: "geojson", data: namePoints(geojson) } },
+      sources: { streams: { type: "geojson", data: namePoints() } },
       layers: [
         ...NAME_TIERS.map(({ id, minZoom }) => ({
           id, type: "symbol", source: "streams", minzoom: minZoom,
@@ -305,6 +425,7 @@ function addNameLabels(geojson) {
   nameMap = labels.getMaplibreMap();
   nameMap.on("load", () => {
     namesReady = true;
+    nameMap.getSource("streams").setData(namePoints()); // the map may have moved while it loaded
     syncNameLabels();
   });
 }

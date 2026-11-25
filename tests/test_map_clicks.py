@@ -227,6 +227,22 @@ class MapClicks(unittest.TestCase):
         self.assertEqual(tooltip.locator("img").count(), 0)
         self.assertIsNone(self.page.evaluate("window.injected"))
 
+    def test_stream_name_stays_on_the_map_when_its_middle_is_off_it(self):
+        # Close to one end of the Jordan, its middle is far off the map. The names are not
+        # drawn offline (their font is not served), so the test reads where they would be.
+        jordan = self.page.evaluate("idBySlug.get(JORDAN_SLUG)")
+        near_end = self.page.evaluate("""(id) => {
+          const longest = layersById.get(id).getLatLngs().reduce((a, b) => (b.length > a.length ? b : a));
+          const { lat, lng } = longest[Math.floor(longest.length / 10)];
+          return [lat, lng];
+        }""", jordan)
+        self.go_to(near_end)
+        anchor_on_map = "(id) => { const [lng, lat] = nameAnchors.get(id); return map.getBounds().contains([lat, lng]); }"
+        self.assertTrue(self.page.evaluate(anchor_on_map, jordan))
+        anchor = self.page.evaluate("(id) => nameAnchors.get(id)", jordan)
+        self.page.evaluate("void map.panBy([60, 40], { animate: false })")
+        self.assertEqual(self.page.evaluate("(id) => nameAnchors.get(id)", jordan), anchor)
+
     def test_search_for_bare_prefix_lists_nothing(self):
         for query in ("נחל", "נחל "):
             self.page.fill("#q", query)

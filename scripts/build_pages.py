@@ -59,6 +59,32 @@ def glossary_path(term):
     return "/glossary/#" + quote(term_id(term), safe="")
 
 
+# In glossary.json a definition links words as [[shown words|target]], or [[target]] when the words are the target.
+# The target is another term, "n:<slug>" for a stream, or "w:<title>" for a Hebrew Wikipedia article.
+TERM_LINK = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
+WIKI_SITES = {"he": "he.wikipedia.org", "en": "en.wikipedia.org", "ru": "ru.wikipedia.org"}
+MAP_PIN = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 '
+           '7-13a7 7 0 0 0-7-7zm0 9.6A2.6 2.6 0 1 1 12 6.4a2.6 2.6 0 0 1 0 5.2z"/></svg>')
+
+
+def plain_text(text):
+    return TERM_LINK.sub(lambda m: m.group(1), text)
+
+
+def link_target(m):
+    return m.group(2) or m.group(1)
+
+
+def wiki_url(lang, title):
+    return f"https://{WIKI_SITES[lang]}/wiki/" + quote(title.replace(" ", "_"), safe="")
+
+
+def pinned(link, slug, name):
+    """A link to a stream's page and a small pin that opens the map on it, kept on one line."""
+    return (f'<span class="pinned">{link}<a class="map-pin" href="/#{E(quote(slug, safe=""))}" title="הצגה על המפה" '
+            f'aria-label="{E(name)} על המפה">{MAP_PIN}</a></span>')
+
+
 def format_km(km):
     return f"{km:.1f}" if km < 10 else f"{int(km + .5):,}"
 
@@ -107,6 +133,16 @@ class Builder:
                 bad += [a for a in item.get("aquifers", []) if a not in aquifers]
                 if bad:
                     raise ValueError(f"glossary.json: {item['term']}: no such stream, basin page or aquifer: {', '.join(bad)}")
+        for section in self.glossary:
+            for item in section["terms"]:
+                targets = [link_target(m) for m in TERM_LINK.finditer(item["text"])]
+                streams = {t[2:] for t in targets if t.startswith("n:")}
+                targets = {term_id(t) for t in targets if not t.startswith(("n:", "w:"))}
+                bad = sorted((targets - set(terms)) | (streams - set(ids_by_slug)))
+                if bad or term_id(item["term"]) in targets:
+                    raise ValueError(f"glossary.json: {item['term']}: links to itself or to an unknown term or stream: {', '.join(bad)}")
+                if set(item.get("wiki", {})) - set(WIKI_SITES):
+                    raise ValueError(f"glossary.json: {item['term']}: wiki languages are he, en and ru")
         missing = {term_id(t) for t in (*SHORT_FLOW.values(), *LINKED_TERMS)} - set(terms)
         if len(terms) != len(set(terms)) or missing:
             raise ValueError(f"glossary.json: duplicate terms, or missing {', '.join(sorted(missing))}")
@@ -114,8 +150,8 @@ class Builder:
     def entry(self, entry_id):
         return self.info[str(entry_id)]
 
-    def link(self, entry):
-        return f'<a href="{E(stream_path(entry["s"]))}">{E(entry["n"])}</a>'
+    def link(self, entry, text=None):
+        return f'<a href="{E(stream_path(entry["s"]))}">{E(text or entry["n"])}</a>'
 
     def flow_steps(self, entry):
         """The way to the sea, as (text, entry or None), like flowPath in app.js."""
@@ -362,6 +398,21 @@ class Builder:
                          crumbs=[("נחלי ישראל", "/"), ("אגני ניקוז", None)],
                          ld=[{"@context": "https://schema.org", "@type": "CollectionPage", "name": title, "url": BASE + "/basin/", "inLanguage": "he"}])
 
+    def linked_text(self, text):
+        out, pos = [], 0
+        for m in TERM_LINK.finditer(text):
+            shown, target = m.group(1), link_target(m)
+            if target.startswith("n:"):
+                entry = self.by_slug[target[2:]]
+                link = pinned(self.link(entry, shown), entry["s"], entry["n"])
+            elif target.startswith("w:"):
+                link = f'<a href="{E(wiki_url("he", target[2:]))}" rel="noopener">{E(shown)}</a>'
+            else:
+                link = f'<a href="#{E(quote(term_id(target), safe=""))}">{E(shown)}</a>'
+            out += [E(text[pos:m.start()]), link]
+            pos = m.end()
+        return "".join(out) + E(text[pos:])
+
     def glossary_page(self):
         aquifers = {aquifer["id"]: aquifer for aquifer in self.aquifers}
         items = [item for section in self.glossary for item in section["terms"]]
@@ -378,16 +429,25 @@ class Builder:
             for item in section["terms"]:
                 also = "".join(f' <span class="also">{label}: {E(", ".join(item[key]))}</span>'
                                for key, label in (("also", "גם"), ("includes", "כולל")) if item.get(key))
-                links = [self.link(self.by_slug[slug]) for slug in item.get("streams", [])]
-                links += [f'<a href="{E(basin_path(slug))}">{E(self.basin_name(self.by_slug[slug]))}</a>'
-                          for slug in item.get("basins", [])]
+                links = [pinned(self.link(self.by_slug[slug]), slug, self.by_slug[slug]["n"]) for slug in item.get("streams", [])]
+                links += [pinned(f'<a href="{E(basin_path(slug))}">{E(self.basin_name(self.by_slug[slug]))}</a>',
+                                 slug, self.basin_name(self.by_slug[slug])) for slug in item.get("basins", [])]
                 links += [f'<a href="/#{E(quote(key, safe=""))}">{E(aquifers[key]["name"])}</a>'
                           for key in item.get("aquifers", [])]
                 examples = f'<p class="examples">לדוגמה: {" · ".join(links)}</p>' if links else ""
-                translation = (f'<p class="tr"><span lang="en" dir="ltr">{E(item["en"])}</span> · '
-                               f'<span lang="ru" dir="ltr">{E(item["ru"])}</span></p>')
+                wiki = item.get("wiki", {})
+                words = []
+                for lang, label in (("en", "Wikipedia"), ("ru", "Википедия")):
+                    if lang in wiki:
+                        words.append(f'<a lang="{lang}" dir="ltr" href="{E(wiki_url(lang, wiki[lang]))}" title="{label}" '
+                                     f'rel="noopener">{E(item[lang])}</a>')
+                    else:
+                        words.append(f'<span lang="{lang}" dir="ltr">{E(item[lang])}</span>')
+                if "he" in wiki:
+                    words.append(f'<a href="{E(wiki_url("he", wiki["he"]))}" rel="noopener">ויקיפדיה</a>')
+                translation = f'<p class="tr">{" · ".join(words)}</p>'
                 rows.append(f'<dt id="{E(term_id(item["term"]))}"><dfn>{E(item["term"])}</dfn>{also}</dt>'
-                            f'<dd>{translation}<p>{E(item["text"])}</p>{examples}</dd>')
+                            f'<dd>{translation}<p>{self.linked_text(item["text"])}</p>{examples}</dd>')
             out.append('    <dl class="glossary">' + "".join(rows) + "</dl>")
         title = "מילון מונחים: נחלים, אגני ניקוז וצורות נוף"
         description = (f"מה זה נחל איתן, נחל אכזב, אגן ניקוז, יובל, נפתול, גב ומכתש: {len(items)} מונחים "
@@ -395,7 +455,7 @@ class Builder:
         terms = {"@context": "https://schema.org", "@type": "DefinedTermSet", "name": title, "url": BASE + "/glossary/",
                  "description": description, "inLanguage": "he",
                  "hasDefinedTerm": [{"@type": "DefinedTerm", "name": item["term"], "alternateName": [item["en"], item["ru"]],
-                                     "description": item["text"],
+                                     "description": plain_text(item["text"]),
                                      "url": BASE + glossary_path(item["term"])} for item in items]}
         return self.page(title=title, description=description, path="/glossary/", body="\n".join(out),
                          crumbs=[("נחלי ישראל", "/"), ("מילון מונחים", None)], ld=[terms])

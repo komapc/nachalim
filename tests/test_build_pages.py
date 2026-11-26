@@ -158,8 +158,20 @@ class BuildPages(unittest.TestCase):
         for term in ("נחל-איתן", "נחל-אכזב", "יובל", "פלג", "נפתול", "אגן-ניקוז"):
             self.assertIn(f'<dt id="{term}">', page)
         self.assertIn(f'href="{html.escape(build_pages.stream_path("נחל-קורן"))}"', page)
-        self.assertIn('<span lang="en" dir="ltr">Meander</span>', page)
-        self.assertIn('<span lang="ru" dir="ltr">Меандр, излучина</span>', page)
+        self.assertIn('href="https://en.wikipedia.org/wiki/Meander" title="Wikipedia" rel="noopener">Meander</a>', page)
+        self.assertIn('rel="noopener">Меандр, излучина</a>', page)
+        self.assertIn(f'href="https://he.wikipedia.org/wiki/{build_pages.quote("נפתול", safe="")}"', page)
+        korn = build_pages.quote("נחל-קורן", safe="")
+        self.assertIn(f'<a href="{html.escape(build_pages.stream_path("נחל-קורן"))}">נחל קורן</a><a class="map-pin" href="/#{korn}"', page)
+        for slug in re.findall(r'class="map-pin" href="/#([^"]+)"', page):
+            self.assertIn(unquote(slug), self.builder.by_slug)
+        ids = set(re.findall(r'<dt id="([^"]+)"', page))
+        inner = re.findall(r'<p>[^<]*(?:<a href="#([^"]+)">[^<]*</a>[^<]*)', page)
+        self.assertGreater(len(inner), 10)
+        for fragment in re.findall(r'href="#([^"]+)"', page):
+            self.assertIn(unquote(html.unescape(fragment)), ids)
+        self.assertIn(f'<a href="#{build_pages.quote("מעיין", safe="")}">מעיינות</a>', page)
+        self.assertNotIn("[[", page)
         for block in re.findall(r'<script type="application/ld\+json">(.*?)</script>', page, re.S):
             self.assertEqual(json.loads(block)["@type"], "DefinedTermSet")
         sitemap = (self.out / "sitemap.xml").read_text(encoding="utf-8")
@@ -181,6 +193,16 @@ class BuildPages(unittest.TestCase):
                 self.builder.check_glossary()
         finally:
             glossary[0]["terms"][0]["streams"].pop()
+
+    def test_glossary_rejects_a_link_to_an_unknown_term(self):
+        item = self.builder.glossary[0]["terms"][0]
+        text = item["text"]
+        item["text"] += " [[מילה|אין-כזה]]"
+        try:
+            with self.assertRaisesRegex(ValueError, "אין-כזה"):
+                self.builder.check_glossary()
+        finally:
+            item["text"] = text
 
     def test_flow_ends_like_the_map(self):
         steps = self.builder.flow_steps(self.builder.by_slug["נחל-דן"])

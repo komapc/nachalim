@@ -39,10 +39,14 @@ class BuildPages(unittest.TestCase):
         self.assertEqual(sum(1 for path in (self.out / "n").rglob("index.html")), len(self.info) + 1)
 
     def test_internal_links_resolve(self):
-        pages = [*(self.out / "n").rglob("index.html"), *(self.out / "basin").rglob("index.html")]
+        pages = [*(self.out / "n").rglob("index.html"), *(self.out / "basin").rglob("index.html"), self.out / "glossary/index.html"]
+        anchors = set(re.findall(r'<dt id="([^"]+)"', self.glossary()))
         for page in pages:
-            for href in re.findall(r'href="(/(?:n|basin)/[^"]*)"', page.read_text(encoding="utf-8")):
-                self.assertTrue(self.exists(html.unescape(href)), f"{page}: {href}")
+            for href in re.findall(r'href="(/(?:n|basin|glossary)/[^"]*)"', page.read_text(encoding="utf-8")):
+                path, _, fragment = html.unescape(href).partition("#")
+                self.assertTrue(self.exists(path), f"{page}: {href}")
+                if fragment:
+                    self.assertIn(unquote(fragment), anchors, f"{page}: {href}")
 
     def test_home_links_resolve(self):
         home = (build_pages.SITE / "index.html").read_text(encoding="utf-8")
@@ -143,6 +147,40 @@ class BuildPages(unittest.TestCase):
         for page in pages:
             for block in re.findall(r'<script type="application/ld\+json">(.*?)</script>', page.read_text(encoding="utf-8"), re.S):
                 json.loads(block)
+
+    def glossary(self):
+        return (self.out / "glossary" / "index.html").read_text(encoding="utf-8")
+
+    def test_glossary_page(self):
+        page = self.glossary()
+        self.assertIn("<h1>מילון מונחים</h1>", page)
+        self.assertIn(f'<link rel="canonical" href="{BASE}/glossary/">', page)
+        for term in ("נחל-איתן", "נחל-אכזב", "יובל", "פלג", "נפתול", "אגן-ניקוז"):
+            self.assertIn(f'<dt id="{term}">', page)
+        self.assertIn(f'href="{html.escape(build_pages.stream_path("נחל-קורן"))}"', page)
+        self.assertIn('<span lang="en" dir="ltr">Meander</span>', page)
+        self.assertIn('<span lang="ru" dir="ltr">Меандр, излучина</span>', page)
+        for block in re.findall(r'<script type="application/ld\+json">(.*?)</script>', page, re.S):
+            self.assertEqual(json.loads(block)["@type"], "DefinedTermSet")
+        sitemap = (self.out / "sitemap.xml").read_text(encoding="utf-8")
+        self.assertIn(f"<loc>{BASE}/glossary/</loc>", sitemap)
+
+    def test_pages_link_the_glossary(self):
+        self.assertIn('href="/glossary/"', (build_pages.SITE / "index.html").read_text(encoding="utf-8"))
+        self.assertIn('href="/glossary/"', (self.out / "n" / "index.html").read_text(encoding="utf-8"))
+        self.assertIn('href="/glossary/"', (self.out / "basin" / "index.html").read_text(encoding="utf-8"))
+        page = self.read(self.builder.by_slug["נחל-ירקון"])
+        self.assertIn(f'href="{build_pages.glossary_path("נחל איתן")}"', page)
+        self.assertIn(f'href="{build_pages.glossary_path("אגן ניקוז")}"', page)
+
+    def test_glossary_rejects_an_unknown_example(self):
+        glossary = self.builder.glossary
+        glossary[0]["terms"][0]["streams"].append("נחל-שאיננו")
+        try:
+            with self.assertRaisesRegex(ValueError, "נחל-שאיננו"):
+                self.builder.check_glossary()
+        finally:
+            glossary[0]["terms"][0]["streams"].pop()
 
     def test_flow_ends_like_the_map(self):
         steps = self.builder.flow_steps(self.builder.by_slug["נחל-דן"])

@@ -155,7 +155,7 @@ class BuildPages(unittest.TestCase):
         page = self.glossary()
         self.assertIn("<h1>מילון מונחים</h1>", page)
         self.assertIn(f'<link rel="canonical" href="{BASE}/glossary/">', page)
-        for term in ("נחל-איתן", "נחל-אכזב", "יובל", "פלג", "נפתול", "אגן-ניקוז"):
+        for term in ("נחל-איתן", "נחל-אכזב", "יובל", "פלג", "נפתול", "אגן-ניקוז", "ספיקה", "שיקום-נחלים"):
             self.assertIn(f'<dt id="{term}">', page)
         self.assertIn(f'href="{html.escape(build_pages.stream_path("נחל-קורן"))}"', page)
         self.assertIn('href="https://en.wikipedia.org/wiki/Meander" title="Wikipedia" rel="noopener">Meander</a>', page)

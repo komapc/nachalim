@@ -5,7 +5,8 @@
   site/n/index.html         every stream, by where the water ends up
   site/basin/<slug>/index.html  a drainage basin with at least MIN_BASIN streams: every stream in it
   site/basin/index.html     every such basin, by where the water ends up
-  site/sitemap.xml          the home page, the lists, the basins, and the streams worth indexing
+  site/glossary/index.html  the words of the map and the summaries, from scripts/glossary.json
+  site/sitemap.xml          the home page, the lists, the basins, the glossary, and the streams worth indexing
 
 Run by .github/workflows/pages.yml before the upload. The output is not committed.
 Labels are read from app.js, so the pages say what the map says.
@@ -20,6 +21,7 @@ from urllib.parse import quote
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SITE = ROOT / "site"
+GLOSSARY = ROOT / "scripts/glossary.json"
 BASE = "https://nachalim.lipu.dev"
 JORDAN_SLUG = "נהר-הירדן"
 MIN_SUMMARY = 80  # a shorter Wikipedia summary only repeats the facts around it
@@ -28,6 +30,7 @@ MIN_BASIN = 3  # a basin of one or two streams says no more than the stream page
 # Names that Hebrew writes with the article after "אגן"; the rest keep the full name, "אגן נחל שורק".
 BASIN_NAMES = {"נהר-הירדן": "הירדן", "נחל-ירקון": "הירקון", "נחל-קישון": "הקישון"}
 SHORT_FLOW = {"perennial": "נחל איתן", "mixed": "איתן בחלקו", "intermittent": "נחל אכזב"}
+LINKED_TERMS = ("אגן ניקוז", "מי תהום")  # the stream pages link these, and the flow terms above, to the glossary
 E = html.escape
 
 
@@ -46,6 +49,14 @@ def stream_path(slug):
 
 def basin_path(slug):
     return f"/basin/{quote(slug, safe='')}/"
+
+
+def term_id(term):
+    return term.replace(" ", "-")
+
+
+def glossary_path(term):
+    return "/glossary/#" + quote(term_id(term), safe="")
 
 
 def format_km(km):
@@ -78,6 +89,27 @@ class Builder:
         home = (SITE / "index.html").read_text(encoding="utf-8")
         self.beacon = re.search(r"<script defer src=\"https://static\.cloudflareinsights\.com/[^>]*></script>", home).group(0)
         self.consent = re.search(r'<script src="https://geo\.lipu\.dev/consent\.js"[^>]*></script>', home).group(0)
+        self.glossary = json.loads(GLOSSARY.read_text(encoding="utf-8"))
+        self.check_glossary()
+
+    def check_glossary(self):
+        """Every example names a stream, basin page or aquifer that exists, and every term the pages link to is defined."""
+        ids_by_slug = {entry["s"]: entry_id for entry_id, entry in self.info.items()}
+        aquifers = {aquifer["id"] for aquifer in self.aquifers}
+        terms = []
+        for section in self.glossary:
+            for item in section["terms"]:
+                terms.append(term_id(item["term"]))
+                if not (item.get("en") and item.get("ru")):
+                    raise ValueError(f"glossary.json: {item['term']}: needs both en and ru")
+                bad = [s for s in item.get("streams", []) if s not in ids_by_slug]
+                bad += [s for s in item.get("basins", []) if ids_by_slug.get(s) not in self.basins]
+                bad += [a for a in item.get("aquifers", []) if a not in aquifers]
+                if bad:
+                    raise ValueError(f"glossary.json: {item['term']}: no such stream, basin page or aquifer: {', '.join(bad)}")
+        missing = {term_id(t) for t in (*SHORT_FLOW.values(), *LINKED_TERMS)} - set(terms)
+        if len(terms) != len(set(terms)) or missing:
+            raise ValueError(f"glossary.json: duplicate terms, or missing {', '.join(sorted(missing))}")
 
     def entry(self, entry_id):
         return self.info[str(entry_id)]
@@ -190,21 +222,26 @@ class Builder:
         out.append(f'    <p class="basin-line">{E(self.drainage[entry["d"]])}</p>')
         out.append(f'    <p><a class="to-map" href="/#{E(quote(entry["s"], safe=""))}">הצגת הנחל על המפה</a></p>')
         facts = []
+        basin = f'<a href="{E(glossary_path("אגן ניקוז"))}">אגן</a>'
         if entry["d"] == "unknown":
-            facts.append(("אגן", "לא זוהה"))
+            facts.append((basin, "לא זוהה"))
         else:
             if own_root and str(entry_id) not in self.basins:
-                facts.append(("אגן", E(self.basin_name(entry))))
+                facts.append((basin, E(self.basin_name(entry))))
             else:
-                facts.append(("אגן", self.basin_link(entry["r"])))
+                facts.append((basin, self.basin_link(entry["r"])))
         count, km = self.basin_stats(entry["r"])
         if count > 1:
             facts.append(("גודל האגן", f"{count:,} נחלים, כ־{format_km(km)} ק״מ"))
         facts.append(("אורך", f"כ־{format_km(entry['k'])} ק״מ"))
-        facts.append(("זרימה", E(self.flows.get(entry.get("f"), "אין מידע"))))
+        flow = E(self.flows.get(entry.get("f"), "אין מידע"))
+        if entry.get("f") in SHORT_FLOW:
+            flow = f'<a href="{E(glossary_path(SHORT_FLOW[entry["f"]]))}">{flow}</a>'
+        facts.append(("זרימה", flow))
         source = next((a for a in self.aquifers if entry["s"] in a["rivers"]), None)
         if source:
-            facts.append(("מקור המים", f'<a href="/#{E(quote(source["id"], safe=""))}">{E(source["name"])}</a>'))
+            facts.append((f'<a href="{E(glossary_path("מי תהום"))}">מקור המים</a>',
+                          f'<a href="/#{E(quote(source["id"], safe=""))}">{E(source["name"])}</a>'))
         out.append('    <dl class="facts">' + "".join(f"<dt>{term}</dt><dd>{value}</dd>" for term, value in facts) + "</dl>")
         out.append("    <h2>לאן הוא זורם</h2>")
         if steps:
@@ -245,7 +282,7 @@ class Builder:
         entries = sorted(self.info.values(), key=lambda entry: entry["n"])
         out = ["    <h1>כל נחלי ישראל, לפי אגן ניקוז</h1>",
                f'    <p class="summary">{len(entries):,} נחלים ונהרות בישראל ובאזור, לפי המקום שאליו המים זורמים. לכל נחל יש עמוד עם אגן הניקוז, האורך, היובלים והדרך אל הים.</p>',
-               '    <p><a class="to-map" href="/">למפה האינטראקטיבית</a> · <a href="/basin/">הנחלים לפי אגני ניקוז</a></p>']
+               '    <p><a class="to-map" href="/">למפה האינטראקטיבית</a> · <a href="/basin/">הנחלים לפי אגני ניקוז</a> · <a href="/glossary/">מילון מונחים</a></p>']
         perennial = [entry for entry in entries if entry.get("f") == "perennial"]
         out.append(f"    <h2>נחלי איתן ({len(perennial)})</h2>")
         out.append('    <ul class="stream-list">' + "".join(f"<li>{self.link(e)}</li>" for e in perennial) + "</ul>")
@@ -310,7 +347,7 @@ class Builder:
                f'    <p class="summary">אגן ניקוז הוא השטח שממנו זורמים המים אל נחל ראשי אחד. כאן מופיעים {len(roots)} אגנים '
                f"שיש בהם לפחות {MIN_BASIN} נחלים, ובהם {total:,} נחלים, לפי המקום שאליו המים זורמים בסוף. "
                "לכל אגן יש עמוד עם כל הנחלים שבו.</p>",
-               '    <p><a class="to-map" href="/">למפה האינטראקטיבית</a> · <a href="/n/">כל הנחלים</a></p>']
+               '    <p><a class="to-map" href="/">למפה האינטראקטיבית</a> · <a href="/n/">כל הנחלים</a> · <a href="/glossary/">מילון מונחים</a></p>']
         for key, label in self.drainage.items():
             group = [root for root in roots if self.entry(root)["d"] == key]
             if group:
@@ -325,15 +362,55 @@ class Builder:
                          crumbs=[("נחלי ישראל", "/"), ("אגני ניקוז", None)],
                          ld=[{"@context": "https://schema.org", "@type": "CollectionPage", "name": title, "url": BASE + "/basin/", "inLanguage": "he"}])
 
+    def glossary_page(self):
+        aquifers = {aquifer["id"]: aquifer for aquifer in self.aquifers}
+        items = [item for section in self.glossary for item in section["terms"]]
+        out = ["    <h1>מילון מונחים</h1>",
+               '    <p class="summary">המילים שמופיעות במפה, בעמודי הנחלים ובתקצירים מוויקיפדיה, בהסבר קצר. '
+               "לכל מונח מופיע גם התרגום לאנגלית ולרוסית, וליד רוב המונחים יש נחלים שבהם אפשר לראות אותם.</p>",
+               '    <p><a class="to-map" href="/">למפה האינטראקטיבית</a> · <a href="/n/">כל הנחלים</a> · '
+               '<a href="/basin/">הנחלים לפי אגני ניקוז</a></p>',
+               '    <p class="toc">' + " · ".join(
+                   f'<a href="#{E(quote(term_id(item["term"]), safe=""))}">{E(item["term"])}</a>' for item in items) + "</p>"]
+        for section in self.glossary:
+            out.append(f"    <h2>{E(section['section'])}</h2>")
+            rows = []
+            for item in section["terms"]:
+                also = "".join(f' <span class="also">{label}: {E(", ".join(item[key]))}</span>'
+                               for key, label in (("also", "גם"), ("includes", "כולל")) if item.get(key))
+                links = [self.link(self.by_slug[slug]) for slug in item.get("streams", [])]
+                links += [f'<a href="{E(basin_path(slug))}">{E(self.basin_name(self.by_slug[slug]))}</a>'
+                          for slug in item.get("basins", [])]
+                links += [f'<a href="/#{E(quote(key, safe=""))}">{E(aquifers[key]["name"])}</a>'
+                          for key in item.get("aquifers", [])]
+                examples = f'<p class="examples">לדוגמה: {" · ".join(links)}</p>' if links else ""
+                translation = (f'<p class="tr"><span lang="en" dir="ltr">{E(item["en"])}</span> · '
+                               f'<span lang="ru" dir="ltr">{E(item["ru"])}</span></p>')
+                rows.append(f'<dt id="{E(term_id(item["term"]))}"><dfn>{E(item["term"])}</dfn>{also}</dt>'
+                            f'<dd>{translation}<p>{E(item["text"])}</p>{examples}</dd>')
+            out.append('    <dl class="glossary">' + "".join(rows) + "</dl>")
+        title = "מילון מונחים: נחלים, אגני ניקוז וצורות נוף"
+        description = (f"מה זה נחל איתן, נחל אכזב, אגן ניקוז, יובל, נפתול, גב ומכתש: {len(items)} מונחים "
+                       "על נחלי ישראל בהסבר קצר, עם תרגום לאנגלית ולרוסית ודוגמאות מהמפה.")
+        terms = {"@context": "https://schema.org", "@type": "DefinedTermSet", "name": title, "url": BASE + "/glossary/",
+                 "description": description, "inLanguage": "he",
+                 "hasDefinedTerm": [{"@type": "DefinedTerm", "name": item["term"], "alternateName": [item["en"], item["ru"]],
+                                     "description": item["text"],
+                                     "url": BASE + glossary_path(item["term"])} for item in items]}
+        return self.page(title=title, description=description, path="/glossary/", body="\n".join(out),
+                         crumbs=[("נחלי ישראל", "/"), ("מילון מונחים", None)], ld=[terms])
+
     def build(self):
         pages = self.site / "n"
         basins = self.site / "basin"
-        for folder in (pages, basins):
+        glossary = self.site / "glossary"
+        for folder in (pages, basins, glossary):
             if folder.exists():
                 shutil.rmtree(folder)
             folder.mkdir(parents=True)
-        urls = [BASE + "/", BASE + "/n/", BASE + "/basin/"]
+        urls = [BASE + "/", BASE + "/n/", BASE + "/basin/", BASE + "/glossary/"]
         (pages / "index.html").write_text(self.list_page(), encoding="utf-8")
+        (glossary / "index.html").write_text(self.glossary_page(), encoding="utf-8")
         (basins / "index.html").write_text(self.basin_list_page(), encoding="utf-8")
         for entry_id, entry in self.info.items():
             folder = pages / entry["s"]

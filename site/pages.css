@@ -20,3 +20,14 @@ body.page > footer p { margin: 0; }
 .basin-list { columns: 14rem; column-gap: 1.5rem; margin: 0; padding: 0; list-style: none; }
 .basin-list li { break-inside: avoid; }
 .km { color: var(--muted); font-size: .85em; }
+.toc { line-height: 1.9; }
+.glossary { margin: 0; }
+.glossary dt { margin-block-start: 1.1rem; font-weight: 700; scroll-margin-block-start: 1rem; }
+.glossary dt:target dfn { color: var(--accent); }
+.glossary dfn { font-style: normal; }
+.glossary .also { margin-inline-start: .4rem; color: var(--muted); font-size: .85em; font-weight: 400; }
+.glossary dd { margin: .2rem 0 0; }
+.glossary dd p { margin: 0 0 .25rem; }
+.examples { font-size: .9rem; }
+.facts dt a { color: inherit; text-decoration-style: dotted; }
+.glossary .tr { color: var(--muted); font-size: .9rem; }

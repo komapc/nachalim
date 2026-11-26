@@ -16,28 +16,56 @@ jobs:
   test:
     uses: ./.github/workflows/test.yml
 
-  deploy:
+  build:
     needs: test
     runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.diff.outputs.urls }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 scripts/build_pages.py
+      - id: diff
+        name: List pages that differ from the live site
+        continue-on-error: true
+        run: |
+          python3 scripts/indexnow.py diff site "$RUNNER_TEMP/changed.txt"
+          echo "urls=$(tr '\n' ' ' < "$RUNNER_TEMP/changed.txt")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  # A separate job, as in GitHub's own Pages workflow, so a failed deploy can be
+  # rerun without uploading the site a second time.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
     permissions:
-      contents: read
       pages: write
       id-token: write
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.retry.outputs.page_url }}
+    steps:
+      # deploy-pages sometimes cannot yet see the artifact the build job uploaded
+      # ("No artifacts named github-pages were found"), so it gets a second try.
+      - id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+      - if: steps.deployment.outcome == 'failure'
+        run: sleep 60
+      - id: retry
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v5
+
+  indexnow:
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/configure-pages@v6
-      - run: python3 scripts/build_pages.py
-      - name: List pages that differ from the live site
-        continue-on-error: true
-        run: python3 scripts/indexnow.py diff site "$RUNNER_TEMP/changed.txt"
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: site
-      - id: deployment
-        uses: actions/deploy-pages@v5
-      - name: Send them to IndexNow (Bing, Yandex)
-        continue-on-error: true
-        run: python3 scripts/indexnow.py ping "$RUNNER_TEMP/changed.txt"
+      - name: Send the changed pages to IndexNow (Bing, Yandex)
+        env:
+          URLS: ${{ needs.build.outputs.changed }}
+        run: |
+          tr ' ' '\n' <<< "$URLS" > "$RUNNER_TEMP/changed.txt"
+          python3 scripts/indexnow.py ping "$RUNNER_TEMP/changed.txt"

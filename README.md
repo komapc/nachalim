@@ -8,7 +8,7 @@ Interactive map of the streams and rivers (נחלים) of Israel, in Hebrew, at 
 python3 -m http.server 8000 -d site
 ```
 
-The map needs no build: `site/` is served as it is. GitHub Pages deploys it on every push to `main` (`.github/workflows/pages.yml`) once the tests pass, after `scripts/build_pages.py` writes the static stream and basin pages and the sitemap. To see those pages locally, run that script first; its output is git-ignored.
+The map needs no build: `site/` is served as it is. GitHub Pages deploys it on every push to `main` (`.github/workflows/pages.yml`) once the tests pass, after `scripts/build_pages.py` writes the static stream and basin pages and the sitemap. To see those pages locally, run that script first; its output is git-ignored. After each deploy, `scripts/indexnow.py` sends the pages that differ from the previous deploy to IndexNow (Bing, Yandex); the key file is `site/483e472b63ec64808ac4046f1b87eeb1.txt`.
 
 ## Layout
 

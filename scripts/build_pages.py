@@ -59,6 +59,23 @@ def glossary_path(term):
     return "/glossary/#" + quote(term_id(term), safe="")
 
 
+# In glossary.json a definition links another term as [[shown words|term]], or [[term]] when the words are the term.
+TERM_LINK = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
+
+
+def plain_text(text):
+    return TERM_LINK.sub(lambda m: m.group(1), text)
+
+
+def linked_text(text):
+    out, pos = [], 0
+    for m in TERM_LINK.finditer(text):
+        target = m.group(2) or m.group(1)
+        out += [E(text[pos:m.start()]), f'<a href="#{E(quote(term_id(target), safe=""))}">{E(m.group(1))}</a>']
+        pos = m.end()
+    return "".join(out) + E(text[pos:])
+
+
 def format_km(km):
     return f"{km:.1f}" if km < 10 else f"{int(km + .5):,}"
 
@@ -107,6 +124,12 @@ class Builder:
                 bad += [a for a in item.get("aquifers", []) if a not in aquifers]
                 if bad:
                     raise ValueError(f"glossary.json: {item['term']}: no such stream, basin page or aquifer: {', '.join(bad)}")
+        for section in self.glossary:
+            for item in section["terms"]:
+                targets = {term_id(m.group(2) or m.group(1)) for m in TERM_LINK.finditer(item["text"])}
+                if targets - set(terms) or term_id(item["term"]) in targets:
+                    raise ValueError(f"glossary.json: {item['term']}: links to itself or to an unknown term: "
+                                     f"{', '.join(sorted(targets - set(terms)))}")
         missing = {term_id(t) for t in (*SHORT_FLOW.values(), *LINKED_TERMS)} - set(terms)
         if len(terms) != len(set(terms)) or missing:
             raise ValueError(f"glossary.json: duplicate terms, or missing {', '.join(sorted(missing))}")
@@ -387,7 +410,7 @@ class Builder:
                 translation = (f'<p class="tr"><span lang="en" dir="ltr">{E(item["en"])}</span> · '
                                f'<span lang="ru" dir="ltr">{E(item["ru"])}</span></p>')
                 rows.append(f'<dt id="{E(term_id(item["term"]))}"><dfn>{E(item["term"])}</dfn>{also}</dt>'
-                            f'<dd>{translation}<p>{E(item["text"])}</p>{examples}</dd>')
+                            f'<dd>{translation}<p>{linked_text(item["text"])}</p>{examples}</dd>')
             out.append('    <dl class="glossary">' + "".join(rows) + "</dl>")
         title = "מילון מונחים: נחלים, אגני ניקוז וצורות נוף"
         description = (f"מה זה נחל איתן, נחל אכזב, אגן ניקוז, יובל, נפתול, גב ומכתש: {len(items)} מונחים "
@@ -395,7 +418,7 @@ class Builder:
         terms = {"@context": "https://schema.org", "@type": "DefinedTermSet", "name": title, "url": BASE + "/glossary/",
                  "description": description, "inLanguage": "he",
                  "hasDefinedTerm": [{"@type": "DefinedTerm", "name": item["term"], "alternateName": [item["en"], item["ru"]],
-                                     "description": item["text"],
+                                     "description": plain_text(item["text"]),
                                      "url": BASE + glossary_path(item["term"])} for item in items]}
         return self.page(title=title, description=description, path="/glossary/", body="\n".join(out),
                          crumbs=[("נחלי ישראל", "/"), ("מילון מונחים", None)], ld=[terms])

@@ -31,3 +31,7 @@ body.page > footer p { margin: 0; }
 .examples { font-size: .9rem; }
 .facts dt a { color: inherit; text-decoration-style: dotted; }
 .glossary .tr { color: var(--muted); font-size: .9rem; }
+.map-pin { display: inline-block; margin-inline-start: .15rem; text-decoration: none; }
+.map-pin svg { width: .85em; height: .85em; vertical-align: -.1em; }
+.pinned { white-space: nowrap; }
+.glossary .tr a { color: inherit; }

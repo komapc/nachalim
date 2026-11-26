@@ -158,8 +158,13 @@ class BuildPages(unittest.TestCase):
         for term in ("נחל-איתן", "נחל-אכזב", "יובל", "פלג", "נפתול", "אגן-ניקוז"):
             self.assertIn(f'<dt id="{term}">', page)
         self.assertIn(f'href="{html.escape(build_pages.stream_path("נחל-קורן"))}"', page)
-        self.assertIn('<span lang="en" dir="ltr">Meander</span>', page)
-        self.assertIn('<span lang="ru" dir="ltr">Меандр, излучина</span>', page)
+        self.assertIn('href="https://en.wikipedia.org/wiki/Meander" title="Wikipedia" rel="noopener">Meander</a>', page)
+        self.assertIn('rel="noopener">Меандр, излучина</a>', page)
+        self.assertIn(f'href="https://he.wikipedia.org/wiki/{build_pages.quote("נפתול", safe="")}"', page)
+        korn = build_pages.quote("נחל-קורן", safe="")
+        self.assertIn(f'<a href="{html.escape(build_pages.stream_path("נחל-קורן"))}">נחל קורן</a><a class="map-pin" href="/#{korn}"', page)
+        for slug in re.findall(r'class="map-pin" href="/#([^"]+)"', page):
+            self.assertIn(unquote(slug), self.builder.by_slug)
         ids = set(re.findall(r'<dt id="([^"]+)"', page))
         inner = re.findall(r'<p>[^<]*(?:<a href="#([^"]+)">[^<]*</a>[^<]*)', page)
         self.assertGreater(len(inner), 10)

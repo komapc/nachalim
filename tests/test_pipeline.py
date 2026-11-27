@@ -30,6 +30,27 @@ class Overrides(unittest.TestCase):
         with self.assertRaises(SystemExit):
             build_rivers.check_overrides([{"name": "נחל יש", "parent": "נחל אין"}], {"נחל יש"})
 
+    def test_drop_of_a_tag_the_build_does_not_read_stops_the_build(self):
+        with self.assertRaises(SystemExit) as stop:
+            build_rivers.check_overrides([{"name": "נחל יש", "drop": ["wikidata", "name:fr"]}], {"נחל יש"})
+        self.assertIn("name:fr", str(stop.exception))
+
+    def test_dropped_tags_are_left_out_of_the_record(self):
+        way = {"tags": {"wikidata": "Q1", "wikipedia": "he:נחל אחר", "name:en": "Other"}, "pts": [(35.0, 31.0), (35.01, 31.0)]}
+        entity = {"idx": 0, "name": "נחל יש", "parent": None, "sink": "dead", "mouth": [35.01, 31.0], "ways": [way]}
+        build_rivers.apply_overrides([entity], [{"name": "נחל יש", "drop": ["wikidata", "name:en"]}])
+        self.assertEqual(build_rivers.summarize(entity, [entity])["tags"], {"wikipedia": "he:נחל אחר"})
+
+
+class WikiTitles(unittest.TestCase):
+    def test_no_two_streams_share_a_summary(self):
+        """A shared title usually means one stream carries another one's Wikidata tag."""
+        streams = {}
+        for entry in INFO.values():
+            if entry.get("w"):
+                streams.setdefault(entry["w"], []).append(entry["s"])
+        self.assertEqual({title: slugs for title, slugs in streams.items() if len(slugs) > 1}, {})
+
 
 class Slugs(unittest.TestCase):
     def test_namesakes_keep_their_numbers_in_any_order(self):

@@ -23,6 +23,7 @@ NAME_RE = re.compile(r"^(נחל|נהר|ואדי|וואדי|ערוץ|יובל|ע�
 SNAP_M = 120  # a way ending this close to another one is taken to flow into it
 SAME_STREAM_M = 3000  # same-named ways this close are pieces of one stream
 OVERRIDES_PATH = pathlib.Path(__file__).with_name("overrides.json")
+SUMMARY_TAGS = ("wikidata", "wikipedia", "name:en")  # the way tags a stream record keeps
 NAMES_PATH = pathlib.Path(__file__).with_name("names.json")
 
 
@@ -338,6 +339,9 @@ def check_overrides(rules, names):
     unknown += [rule["parent"] for rule in rules if "parent" in rule and rule["parent"] not in names]
     if unknown:
         sys.exit(f"{OVERRIDES_PATH.name}: no stream is named " + ", ".join(sorted(set(unknown))))
+    bad = [key for rule in rules for key in rule.get("drop", ()) if key not in SUMMARY_TAGS]
+    if bad:
+        sys.exit(f"{OVERRIDES_PATH.name}: drop names a tag the build does not read: " + ", ".join(sorted(set(bad))))
 
 
 def apply_overrides(entities, rules=None):
@@ -363,6 +367,8 @@ def apply_overrides(entities, rules=None):
                 entity["parent"] = None
             if "flow" in rule:
                 entity["flow"] = rule["flow"]
+            if "drop" in rule:
+                entity["drop"] = set(rule["drop"])
 
 
 def summarize(entity, entities):
@@ -373,7 +379,9 @@ def summarize(entity, entities):
     tags = collections.Counter()
     total = wet = dry = 0
     for way in entity["ways"]:
-        for key in ("wikidata", "wikipedia", "name:en"):
+        for key in SUMMARY_TAGS:
+            if key in entity.get("drop", ()):
+                continue
             if way["tags"].get(key):
                 tags[(key, way["tags"][key])] += 1
         km = length_km(way["pts"])

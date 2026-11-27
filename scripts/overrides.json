@@ -21,6 +21,7 @@
   {"name": "נחל גילבון", "flow": "mixed"},
   {"name": "נחל דישון", "flow": "mixed"},
   {"name": "נחל עיון", "flow": "mixed"},
+  {"name": "נחל קידר", "drop": ["wikidata", "name:en"]},
   {"name": "נחל מכוך", "parent": "נהר הירדן", "via": "wiki"},
   {"name": "נחל דומה", "parent": "נחל אדוריים", "via": "wiki"},
   {"name": "נחל משמר העמק", "parent": "נחל קישון", "via": "wiki"},
